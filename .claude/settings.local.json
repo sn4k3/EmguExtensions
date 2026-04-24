@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(findstr /n \"GetSpan\" \"D:\\\\Tiago\\\\OneDrive\\\\Programming\\\\C#\\\\EmguExtensions\\\\EmguExtensions\\\\Extensions\\\\EmguExtensions.cs\")",
+      "Bash(dotnet --version)",
+      "Bash(dotnet test *)"
+    ]
+  }
+}

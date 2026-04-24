@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/root/">
+    <File Path=".gitignore" />
+    <File Path="CHANGELOG.md" />
+    <File Path="CODE_OF_CONDUCT.md" />
+    <File Path="CONTRIBUTING.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="EmguExtensions.Benchmarks/EmguExtensions.Benchmarks.csproj" />
+  <Project Path="EmguExtensions.Tests/EmguExtensions.Tests.csproj" Id="5c3b5281-1459-4074-ac20-d41a93042208" />
+  <Project Path="EmguExtensions/EmguExtensions.csproj" />
+</Solution>

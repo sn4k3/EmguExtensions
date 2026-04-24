@@ -1,2 +1,317 @@
-# EmguExtensions
-EmguCV Extensions for C#
+# [![Logo](https://raw.githubusercontent.com/sn4k3/EmguExtensions/main/media/EmguExtensions-32.png)](#) EmguExtensions
+
+[![License](https://img.shields.io/github/license/sn4k3/EmguExtensions?style=for-the-badge)](https://github.com/sn4k3/EmguExtensions/blob/master/LICENSE)
+[![GitHub repo size](https://img.shields.io/github/repo-size/sn4k3/EmguExtensions?style=for-the-badge)](#)
+[![Code size](https://img.shields.io/github/languages/code-size/sn4k3/EmguExtensions?style=for-the-badge)](#)
+[![Nuget](https://img.shields.io/nuget/v/EmguExtensions?style=for-the-badge)](https://www.nuget.org/packages/EmguExtensions)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/sn4k3?color=red&style=for-the-badge)](https://github.com/sponsors/sn4k3)
+
+A high-performance .NET library that extends [Emgu.CV](https://www.emgu.com) (OpenCV wrapper) with span-based `Mat` accessors, ROI utilities, pluggable Mat compression, structured contour hierarchies, and drawing helpers.
+
+## Features
+
+- **Span-based Mat access** - Zero-copy `GetSpan<T>`, `GetSpan2D<T>`, and `GetReadOnlySpan2D<T>` accessors for fast pixel manipulation
+- **ROI utilities** - `Roi`, `SafeRoi` (clamped), and `RoiFromCenter` for safe region-of-interest cropping
+- **Image transforms** - Rotate with adjusted bounds, letterbox creation, crop-by-bounds, and shrink-to-fit resizing that reports whether the image changed
+- **Mat compression** - Pluggable compressors (PNG, Deflate, GZip, ZLib, Brotli, Zstd) with `CMat` for memory-efficient compressed image storage. `CMat.Compress` is thread-safe — concurrent calls are serialized automatically
+- **Contour hierarchies** - Structured `EmguContour`, `EmguContours`, and `EmguContourFamily` wrappers for OpenCV contour trees using hierarchy links
+- **Drawing helpers** - Polygon geometry, multi-line text rendering with alignment, SVG path generation, and predefined colors
+- **Disposal infrastructure** - `DisposableObject`, `LeaveOpenDisposableObject`, and `GCSafeHandle` for thread-safe resource management
+
+## Requirements
+
+- [.NET 10](https://dotnet.microsoft.com/download) or later
+- [Emgu.CV](https://www.nuget.org/packages/Emgu.CV) Latest
+
+## Installation
+
+### NuGet Package Manager
+
+```
+Install-Package EmguExtensions
+```
+
+### .NET CLI
+
+```bash
+dotnet add package EmguExtensions
+```
+
+## Quick Start
+
+### Span-Based Mat Access
+
+```csharp
+using EmguExtensions;
+using Emgu.CV;
+using Emgu.CV.CvEnum;
+
+// Create or load a Mat
+using var mat = new Mat(100, 100, DepthType.Cv8U, 1);
+
+// Zero-copy span access for fast pixel reads/writes
+var span = mat.GetSpan<byte>();
+span[0] = 255; // Set first pixel
+
+// 2D span access
+var span2D = mat.GetSpan2D<byte>();
+span2D[10, 20] = 128; // Row 10, Col 20
+```
+
+### Safe ROI Cropping
+
+```csharp
+using var source = CvInvoke.Imread("image.png");
+
+// SafeRoi clamps to mat bounds - never throws on out-of-range coordinates
+using var roi = source.SafeRoi(new Rectangle(-10, -10, 200, 200));
+```
+
+### Image Sizing and Transforms
+
+```csharp
+// Create a fixed-size letterboxed image. targetWidth and targetHeight must be positive.
+using var boxed = source.CreateLetterBox(640, 480, out float scale, out int padX, out int padY);
+
+// Shrink only when the image exceeds the target bounds. Returns true when resized.
+bool wasShrunk = source.ShrinkToFitPreserveAspect(1024, 768);
+
+// Output overloads populate dst even when no resize/rotation is needed.
+using var resized = new Mat();
+bool resizedWasShrunk = source.ShrinkToFitPreserveAspect(resized, 1024, 768);
+
+using var rotated = new Mat();
+source.RotateAdjustBounds(rotated, angle: 30);
+```
+
+### Mat Compression with CMat
+
+```csharp
+using EmguExtensions;
+
+// Compress a Mat for memory-efficient storage
+var cmat = new CMat();
+cmat.Compress(mat); // Auto-selects best storage (compressed or raw)
+
+// Decompress back to Mat — caller owns and must dispose the returned Mat
+using var restored = cmat.Decompress();
+
+// Use a specific compressor and level
+cmat.Compressor = MatCompressorBrotli.Instance;
+cmat.CompressionLevel = CompressionLevel.SmallestSize;
+cmat.Compress(mat);
+
+// Compress(Mat) and Compress(MatRoi) are thread-safe — safe to call from multiple threads
+Parallel.ForEach(frames, (frame, _, i) =>
+{
+    using var mat = frame.ToMat();
+    compressedFrames[i].Compress(mat);
+});
+
+// Switch compressor and re-encode existing data in one step
+cmat.ChangeCompressor(MatCompressorDeflate.Instance, reEncodeWithNewCompressor: true);
+
+// Equality is hash-based (XxHash3) — O(1) for mismatches, fast for collections
+bool same = cmat1 == cmat2;
+```
+
+### Contour Hierarchy
+
+```csharp
+using EmguExtensions;
+
+// Find contours with full hierarchy
+using var contours = new EmguContours(binaryImage, RetrType.Tree);
+
+// Iterate contour families (tree roots)
+foreach (var family in contours.Families)
+{
+    Console.WriteLine($"Area: {family.Self.Area}, Children: {family.Count}");
+    // Even depth = solid fill; odd depth = hole/cavity
+}
+```
+
+### Drawing Helpers
+
+```csharp
+using EmguExtensions;
+
+// Generate regular polygon vertices
+var hexVertices = DrawingExtensions.GetPolygonVertices(6, new SizeF(50, 50), new PointF(100, 100));
+
+// Multi-line text with alignment
+mat.PutTextExtended("Line 1\nLine 2\nLine 3",
+    new Point(50, 50),
+    FontFace.HersheyComplex,
+    1.0,
+    EmguExtensions.WhiteColor,
+    lineAlignment: PutTextLineAlignment.Center);
+```
+
+## Available Compressors
+
+| Compressor | Class | Description |
+|---|---|---|
+| None | `MatCompressorNone` | No compression (raw bytes) |
+| PNG | `MatCompressorPng` | PNG image encoding via OpenCV |
+| Deflate | `MatCompressorDeflate` | Deflate stream compression |
+| GZip | `MatCompressorGZip` | GZip stream compression |
+| ZLib | `MatCompressorZLib` | ZLib stream compression |
+| Brotli | `MatCompressorBrotli` | Brotli stream compression |
+| Zstd | `MatCompressorZstd` | Zstandard compression (.NET 11+) |
+
+All compressors are singletons accessed via `Instance` (e.g., `MatCompressorBrotli.Instance`).  
+
+`CMat` automatically falls back to raw (uncompressed) storage when:
+- The source is smaller than `ThresholdToCompress` (default 512 bytes), or
+- Compression produces a result larger than the original.
+
+## Benchmarks
+
+### Compressor benchmark
+```
+BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.8246/25H2/2025Update/HudsonValley2)
+AMD Ryzen 9 7845HX with Radeon Graphics 3.00GHz, 1 CPU, 24 logical and 12 physical cores
+.NET SDK 10.0.201
+  [Host]     : .NET 10.0.5 (10.0.5, 10.0.526.15411), X64 RyuJIT x86-64-v4
+  Job-MTJJIS : .NET 10.0.5 (10.0.5, 10.0.526.15411), X64 RyuJIT x86-64-v4
+
+MaxIterationCount=16
+
+| Method     | MatSize | CompressorName | Level         | Mean        | Error       | StdDev      | Gen0     | Gen1     | Gen2     | Allocated |
+|----------- |-------- |--------------- |-------------- |------------:|------------:|------------:|---------:|---------:|---------:|----------:|
+| Compress   | 1920    | Brotli         | NoCompression |    332.7 us |    41.19 us |    40.46 us |        - |        - |        - |    3216 B |
+| Compress   | 1920    | Brotli         | Fastest       |    341.5 us |    57.30 us |    56.27 us |        - |        - |        - |    2832 B |
+| Compress   | 1920    | ZLib           | Fastest       |    557.4 us |    17.84 us |    15.81 us |   1.9531 |        - |        - |   45800 B |
+| Compress   | 1920    | ZLib           | NoCompression |    651.8 us |     9.10 us |     8.52 us | 247.0703 | 247.0703 | 247.0703 | 3692704 B |
+| Compress   | 1920    | GZip           | NoCompression |    665.2 us |    15.21 us |    14.22 us | 246.0938 | 246.0938 | 246.0938 | 3692725 B |
+| Compress   | 1920    | GZip           | Fastest       |    759.1 us |    90.62 us |    89.00 us |   1.9531 |        - |        - |   45808 B |
+| Compress   | 1920    | Deflate        | Fastest       |    770.6 us |    49.59 us |    48.70 us |   1.9531 |        - |        - |   45760 B |
+| Compress   | 1920    | Deflate        | NoCompression |    809.3 us |    53.88 us |    52.92 us | 245.1172 | 245.1172 | 245.1172 | 3692687 B |
+| Compress   | 1920    | None           | NoCompression |    823.4 us |     7.71 us |     6.83 us | 398.4375 | 398.4375 | 398.4375 | 3686548 B |
+| Compress   | 1920    | ZLib           | Optimal       |  1,156.1 us |   101.62 us |    95.06 us |        - |        - |        - |   23568 B |
+| Compress   | 1920    | GZip           | Optimal       |  1,383.6 us |   142.92 us |   140.36 us |        - |        - |        - |   23584 B |
+| Compress   | 1920    | Deflate        | Optimal       |  1,428.1 us |    85.60 us |    84.07 us |        - |        - |        - |   23528 B |
+| Compress   | 1920    | Brotli         | Optimal       |  4,932.8 us |   695.09 us |   682.67 us |        - |        - |        - |    1329 B |
+| Compress   | 1920    | ZLib           | SmallestSize  |  6,819.1 us |    93.58 us |    87.53 us |        - |        - |        - |   15552 B |
+| Compress   | 1920    | GZip           | SmallestSize  |  9,376.0 us |   262.00 us |   257.31 us |        - |        - |        - |   15568 B |
+| Compress   | 1920    | Deflate        | SmallestSize  |  9,454.6 us |   393.20 us |   386.17 us |        - |        - |        - |   15520 B |
+| Compress   | 1920    | PNG            | Optimal       | 16,037.3 us | 1,881.88 us | 1,848.26 us |        - |        - |        - |   25496 B |
+| Compress   | 1920    | PNG            | NoCompression | 16,710.6 us | 1,337.52 us | 1,313.62 us | 375.0000 | 375.0000 | 375.0000 | 3694734 B |
+| Compress   | 1920    | PNG            | Fastest       | 17,097.2 us |   744.32 us |   731.02 us |        - |        - |        - |   25736 B |
+| Compress   | 1920    | PNG            | SmallestSize  | 40,221.4 us | 1,156.69 us | 1,136.03 us |        - |        - |        - |    9280 B |
+| Compress   | 1920    | Brotli         | SmallestSize  | 85,092.8 us | 5,242.87 us | 5,149.20 us |        - |        - |        - |     713 B |
+|            |         |                |               |             |             |             |          |          |          |           |
+| Decompress | 1920    | Deflate        | Optimal       |    121.6 us |     0.30 us |     0.25 us |        - |        - |        - |     304 B |
+| Decompress | 1920    | Deflate        | Fastest       |    123.1 us |     1.21 us |     1.13 us |        - |        - |        - |     304 B |
+| Decompress | 1920    | None           | NoCompression |    140.3 us |     1.06 us |     0.99 us |        - |        - |        - |         - |
+| Decompress | 1920    | Deflate        | SmallestSize  |    147.8 us |    13.29 us |    13.05 us |        - |        - |        - |     304 B |
+| Decompress | 1920    | Deflate        | NoCompression |    158.2 us |     9.75 us |     9.12 us |        - |        - |        - |     304 B |
+| Decompress | 1920    | ZLib           | SmallestSize  |    168.0 us |     1.26 us |     1.12 us |        - |        - |        - |     336 B |
+| Decompress | 1920    | ZLib           | Optimal       |    174.6 us |     1.64 us |     1.53 us |        - |        - |        - |     336 B |
+| Decompress | 1920    | ZLib           | Fastest       |    175.2 us |     1.83 us |     1.71 us |        - |        - |        - |     336 B |
+| Decompress | 1920    | GZip           | SmallestSize  |    181.5 us |     1.76 us |     1.65 us |        - |        - |        - |     336 B |
+| Decompress | 1920    | ZLib           | NoCompression |    201.9 us |     3.73 us |     3.49 us |        - |        - |        - |     336 B |
+| Decompress | 1920    | GZip           | NoCompression |    209.3 us |     2.43 us |     2.28 us |        - |        - |        - |     336 B |
+| Decompress | 1920    | GZip           | Fastest       |    214.5 us |    25.51 us |    25.06 us |        - |        - |        - |     336 B |
+| Decompress | 1920    | GZip           | Optimal       |    241.6 us |     4.62 us |     4.54 us |        - |        - |        - |     336 B |
+| Decompress | 1920    | Brotli         | NoCompression |  1,701.2 us |    41.09 us |    34.31 us |        - |        - |        - |     208 B |
+| Decompress | 1920    | Brotli         | Fastest       |  1,976.2 us |    36.79 us |    34.41 us |        - |        - |        - |     209 B |
+| Decompress | 1920    | Brotli         | SmallestSize  |  2,514.9 us |    45.01 us |    35.14 us |        - |        - |        - |     209 B |
+| Decompress | 1920    | Brotli         | Optimal       |  2,529.3 us |    10.05 us |     8.91 us |        - |        - |        - |     209 B |
+| Decompress | 1920    | PNG            | Fastest       |  7,030.7 us |    54.41 us |    50.89 us |        - |        - |        - |      88 B |
+| Decompress | 1920    | PNG            | Optimal       |  7,079.6 us |    39.79 us |    37.22 us |        - |        - |        - |      88 B |
+| Decompress | 1920    | PNG            | NoCompression |  7,939.6 us |    97.27 us |    90.98 us |        - |        - |        - |      88 B |
+| Decompress | 1920    | PNG            | SmallestSize  | 10,217.6 us |    94.53 us |    88.43 us |        - |        - |        - |      88 B |
+```
+
+### Mat.ToArray() benchmark
+
+```
+BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.8246/25H2/2025Update/HudsonValley2)
+AMD Ryzen 9 7845HX with Radeon Graphics 3.00GHz, 1 CPU, 24 logical and 12 physical cores
+.NET SDK 10.0.202
+  [Host]     : .NET 10.0.6 (10.0.6, 10.0.626.17701), X64 RyuJIT x86-64-v4
+  DefaultJob : .NET 10.0.6 (10.0.6, 10.0.626.17701), X64 RyuJIT x86-64-v4
+
+
+| Method                | MatSize | Mean       | Error    | StdDev   | Ratio | RatioSD | Gen0     | Gen1     | Gen2     | Allocated | Alloc Ratio |
+|---------------------- |-------- |-----------:|---------:|---------:|------:|--------:|---------:|---------:|---------:|----------:|------------:|
+| GetRawData            | 1920    |   617.7 us |  6.08 us |  5.08 us |  0.99 |    0.04 | 999.0234 | 999.0234 | 999.0234 |   3.52 MB |        1.00 |
+| GetSpan.ToArray       | 1920    |   623.8 us | 10.47 us |  9.28 us |  1.00 |    0.05 | 999.0234 | 999.0234 | 999.0234 |   3.52 MB |        1.00 |
+| 'ToArray (extension)' | 1920    |   626.5 us | 11.84 us | 28.15 us |  1.00 |    0.06 | 999.0234 | 999.0234 | 999.0234 |   3.52 MB |        1.00 |
+|                       |         |            |          |          |       |         |          |          |          |           |             |
+| 'ToArray (extension)' | 3840    | 1,444.4 us | 28.81 us | 32.02 us |  1.00 |    0.03 | 500.0000 | 500.0000 | 500.0000 |  14.06 MB |        1.00 |
+| GetSpan.ToArray       | 3840    | 1,551.3 us | 16.07 us | 15.04 us |  1.07 |    0.02 | 500.0000 | 500.0000 | 500.0000 |  14.06 MB |        1.00 |
+| GetRawData            | 3840    | 1,582.3 us | 21.02 us | 19.66 us |  1.10 |    0.03 | 500.0000 | 500.0000 | 500.0000 |  14.06 MB |        1.00 |
+```
+
+## Project Structure
+
+```
+EmguExtensions/
+  Extensions/
+    EmguExtensions.cs           # Mat span accessors, ROI, copy, transforms, drawing, shrink-to-fit
+    EmguExtensions.Constants.cs # Predefined colors, anchor, shared stream manager
+    EmguExtensions.Static.cs    # Text measurement, kernel creation, Mat factories
+    DrawingExtensions.cs        # Color scaling, polygon geometry and vertices
+    PointExtensions.cs          # Euclidean distance, rotation around a pivot
+    ArrayExtensions.cs          # High-performance uninitialized-memory array copy
+    CompressionExtensions.cs    # CompressionLevel enum mapping (0–3 → enum)
+    StaticObjects.cs            # Internal: line-break character constants
+  MatCompressor/
+    MatCompressor.cs            # Abstract base — template method, async overloads
+    MatCompressor.None.cs       # Raw (uncompressed) passthrough
+    MatCompressor.Png.cs        # PNG via OpenCV Imdecode/Imencode
+    MatCompressor.Deflate.cs    # Deflate stream
+    MatCompressor.GZip.cs       # GZip stream
+    MatCompressor.ZLib.cs       # ZLib stream
+    MatCompressor.Brotli.cs     # Brotli stream
+    MatCompressor.Zstd.cs       # Zstandard stream (.NET 11+)
+    CMat.cs                     # Compressed Mat — thread-safe Compress, XxHash3 equality
+  Contours/
+    EmguContour.cs              # Single contour wrapper (lazy bounds, area, perimeter, disposal guards)
+    EmguContours.cs             # Contour collection with hierarchy-link tree and grouping helpers
+    EmguContourFamily.cs        # Tree node: Self, Depth, Parent, Count/children traversal
+  Handlers/
+    DisposableObject.cs         # Abstract full Dispose pattern base with atomic dispose guard
+    LeaveOpenDisposableObject.cs # Dispose with leave-open semantics
+    GCSafeHandle.cs             # SafeHandle wrapper for GCHandle pinning
+  Strides/
+    GreyLine.cs                 # Straight run of pixels with the same grey value (line scan)
+    GreyStride.cs               # Contiguous pixel run with index, location, and grey value
+  MatRoi.cs                     # ROI crop with optional per-edge padding
+  Enums/
+    PutTextLineAlignment.cs     # None | Left | Center | Right for PutTextExtended
+EmguExtensions.Tests/           # xUnit test suite
+  MatFactory.cs                 # Shared Mat helpers for tests
+  UnitTestCMat.cs               # CMat compression/decompression tests
+  UnitTestCMatThreadSafety.cs   # CMat concurrent Compress thread-safety tests
+  UnitTestEmguContours.cs       # Contour hierarchy tests
+  UnitTestEmguExtensions.cs     # Extension method tests
+  UnitTestFindMethods.cs        # Pixel-find method tests
+  UnitTestMatRoi.cs             # MatRoi crop and padding tests
+  UnitTestScanMethods.cs        # Scan/stride method tests
+```
+
+## Building from Source
+
+```bash
+# Restore and build
+dotnet restore
+dotnet build
+
+# Run tests
+dotnet test EmguExtensions.Tests
+
+# Pack for NuGet (Release only)
+dotnet pack EmguExtensions --configuration Release --output .
+```
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

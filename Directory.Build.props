@@ -1,0 +1,59 @@
+<Project>
+    <PropertyGroup>
+        <!-- Project -->
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+
+        <!-- Metadata -->
+        <ProductName>EmguExtensions</ProductName>
+        <Company>PTRTECH</Company>
+        <CompanyRDNS>pt.ptrtech</CompanyRDNS>
+        <Authors>Tiago Conceição</Authors>
+        <Copyright>Copyright 2026-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
+        <Description>A high-performance .NET library that extends Emgu.CV (OpenCV wrapper) with span-based Mat accessors, ROI utilities, pluggable Mat compression (PNG, Deflate, GZip, ZLib, Brotli, Zstd), CMat for memory-efficient compressed image storage, structured contour hierarchy wrappers, and drawing helpers for polygons and multi-line text rendering.</Description>
+        <Version>0.1.0</Version>
+
+        <!-- Package -->
+        <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(ProductName).ico</ApplicationIcon>
+        <PackageIcon>$(ProductName)-128.png</PackageIcon>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <RepositoryType>Git</RepositoryType>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <RepositoryUrl>https://github.com/sn4k3/EmguExtensions</RepositoryUrl>
+        <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+        <PackageReleaseNotes>$(RepositoryUrl)/releases</PackageReleaseNotes>
+        <PackageTags>emgu;emgucv;opencv;image-processing;computer-vision;mat;compression;brotli;gzip;zlib;zstd;deflate;png;cmat;roi;contours;span;extensions;dotnet;csharp</PackageTags>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+        <!-- Set the path map and artifacts path. -->
+        <PathMap>$(MSBuildProjectDirectory)=$(MSBuildProjectName)</PathMap>
+        <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+        <CommonPublishDir>$(ArtifactsPath)\publish</CommonPublishDir>
+
+        <!-- Enable Build Acceleration in Visual Studio. -->
+        <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+
+        <!-- Sign -->
+        <SignAssembly>True</SignAssembly>
+        <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)$(ProductName).snk</AssemblyOriginatorKeyFile>
+
+        <!-- No pack under Debug -->
+        <IsPackable Condition="'$(Configuration)' == 'Debug'">false</IsPackable>
+
+        <!-- ContinuousIntegrationBuild -->
+        <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)media\$(ProductName)-128.png" Pack="true" PackagePath="" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" Visible="false"/>
+    </ItemGroup>
+</Project>
