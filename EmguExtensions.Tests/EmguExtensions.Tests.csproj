@@ -16,9 +16,9 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
 
-        <PackageReference Include="Emgu.CV.runtime.mini.macos" Version="4.12.0.5764" GeneratePathProperty="true" />
-        <PackageReference Include="Emgu.CV.runtime.mini.ubuntu-x64" Version="4.12.0.5764" GeneratePathProperty="true" />
-        <PackageReference Include="Emgu.CV.runtime.mini.windows" Version="4.12.0.5764" GeneratePathProperty="true" />
+        <PackageReference Include="Emgu.CV.runtime.mini.macos" Version="4.12.0.5764" />
+        <PackageReference Include="Emgu.CV.runtime.mini.ubuntu-x64" Version="4.12.0.5764" />
+        <PackageReference Include="Emgu.CV.runtime.mini.windows" Version="4.12.0.5764" />
     </ItemGroup>
 
     <ItemGroup>
@@ -28,16 +28,4 @@
     <ItemGroup>
         <Using Include="Xunit" />
     </ItemGroup>
-
-    <!-- Emgu.CV native runtime packages use distro-specific RIDs (ubuntu-x64, win-x64, osx-x64)
-         that aren't selected under portable RID resolution on modern .NET. Copy the matching
-         native library to the output directory explicitly so tests can P/Invoke into OpenCV. -->
-    <Target Name="CopyEmguNativeLibraries" AfterTargets="Build">
-        <ItemGroup>
-            <_EmguNative Include="$(PkgEmgu_CV_runtime_mini_ubuntu-x64)\runtimes\ubuntu-x64\native\*" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
-            <_EmguNative Include="$(PkgEmgu_CV_runtime_mini_windows)\runtimes\win-x64\native\*" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
-            <_EmguNative Include="$(PkgEmgu_CV_runtime_mini_macos)\runtimes\osx-x64\native\*" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
-        </ItemGroup>
-        <Copy SourceFiles="@(_EmguNative)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
-    </Target>
 </Project>
