@@ -8,6 +8,9 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
 
+        <!-- Required so NuGet resolves distro-specific RIDs (e.g. ubuntu-x64) used by Emgu.CV native runtime packages. -->
+        <UseRidGraph>true</UseRidGraph>
+
         <!-- Metadata -->
         <ProductName>EmguExtensions</ProductName>
         <Company>PTRTECH</Company>
