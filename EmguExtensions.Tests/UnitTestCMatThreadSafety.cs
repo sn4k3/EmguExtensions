@@ -41,11 +41,11 @@ public class UnitTestCMatThreadSafety
         var tasks = Enumerable.Range(0, ThreadCount).Select(i => Task.Run(() =>
         {
             using var mat = CreateMat(i * 10);
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat.Compress(mat);
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.True(cmat.IsInitialized);
         Assert.Equal(100, cmat.Width);
@@ -68,13 +68,13 @@ public class UnitTestCMatThreadSafety
         var tasks = Enumerable.Range(0, ThreadCount).Select(_ => Task.Run(() =>
         {
             using var mat = CreateMat(pixelValue);
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat.Compress(mat);
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
-        using var result = cmat.Decompress();
+        using var result = await cmat.DecompressAsync(TestContext.Current.CancellationToken);
         Assert.Equal(new Size(100, 80), result.Size);
         Assert.Equal(expected, result.ToArray());
     }
@@ -88,11 +88,11 @@ public class UnitTestCMatThreadSafety
         var tasks = Enumerable.Range(0, ThreadCount).Select(i => Task.Run(() =>
         {
             using var mat = i % 2 == 0 ? new Mat() : CreateMat();
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat.Compress(mat);
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.True(cmat.IsInitialized);
     }
@@ -109,10 +109,10 @@ public class UnitTestCMatThreadSafety
         var tasks = Enumerable.Range(0, ThreadCount).Select(i => Task.Run(async () =>
         {
             using var mat = CreateMat(i * 15);
-            await cmat.CompressAsync(mat);
-        })).ToArray();
+            await cmat.CompressAsync(mat, TestContext.Current.CancellationToken);
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.True(cmat.IsInitialized);
         Assert.Equal(100, cmat.Width);
@@ -134,7 +134,8 @@ public class UnitTestCMatThreadSafety
 
         var cmat = new CMat();
 
-        await Task.Run(() => cmat.Compress(matRoi)).WaitAsync(TestTimeout);
+        await Task.Run(() => cmat.Compress(matRoi), TestContext.Current.CancellationToken)
+            .WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.True(cmat.IsInitialized);
         Assert.Equal(100, cmat.Width);
@@ -152,7 +153,8 @@ public class UnitTestCMatThreadSafety
 
         var cmat = new CMat();
 
-        await Task.Run(() => cmat.Compress(matRoi)).WaitAsync(TestTimeout);
+        await Task.Run(() => cmat.Compress(matRoi), TestContext.Current.CancellationToken)
+            .WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.True(cmat.IsInitialized);
         Assert.Equal(Rectangle.Empty, cmat.Roi);
@@ -170,11 +172,11 @@ public class UnitTestCMatThreadSafety
         var tasks = Enumerable.Range(0, ThreadCount).Select(_ => Task.Run(() =>
         {
             using var matRoi = new MatRoi(sourceMat, roiRect, leaveOpen: true);
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat.Compress(matRoi);
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.True(cmat.IsInitialized);
         Assert.Equal(100, cmat.Width);
@@ -194,8 +196,9 @@ public class UnitTestCMatThreadSafety
         var cmat = new CMat(mat, MatCompressorBrotli.Instance);
 
         await Task.Run(() =>
-            cmat.ChangeCompressor(MatCompressorDeflate.Instance, reEncodeWithNewCompressor: true))
-            .WaitAsync(TestTimeout);
+            cmat.ChangeCompressor(MatCompressorDeflate.Instance, reEncodeWithNewCompressor: true),
+            TestContext.Current.CancellationToken)
+            .WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.Same(MatCompressorDeflate.Instance, cmat.Decompressor);
         Assert.True(cmat.IsInitialized);
@@ -210,18 +213,18 @@ public class UnitTestCMatThreadSafety
 
         var changeTask = Task.Run(() =>
         {
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat.ChangeCompressor(MatCompressorDeflate.Instance, reEncodeWithNewCompressor: true);
-        });
+        }, TestContext.Current.CancellationToken);
 
         var compressTask = Task.Run(() =>
         {
             using var m = CreateMat(100);
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat.Compress(m);
-        });
+        }, TestContext.Current.CancellationToken);
 
-        await Task.WhenAll(changeTask, compressTask).WaitAsync(TestTimeout);
+        await Task.WhenAll(changeTask, compressTask).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.True(cmat.IsInitialized);
     }
@@ -243,12 +246,12 @@ public class UnitTestCMatThreadSafety
 
         var tasks = Enumerable.Range(0, ThreadCount).Select(_ => Task.Run(() =>
         {
-            barrier.SignalAndWait(); // All readers start simultaneously
+            barrier.SignalAndWait(TestContext.Current.CancellationToken); // All readers start simultaneously
             using var decompressed = cmat.Decompress();
             results.Add(decompressed.ToArray());
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.Equal(ThreadCount, results.Count);
         foreach (var result in results)
@@ -270,12 +273,12 @@ public class UnitTestCMatThreadSafety
 
         var tasks = Enumerable.Range(0, ThreadCount).Select(_ => Task.Run(() =>
         {
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             using var decompressed = cmat.RawDecompress();
             results.Add(decompressed.ToArray());
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.Equal(ThreadCount, results.Count);
         foreach (var result in results)
@@ -295,11 +298,11 @@ public class UnitTestCMatThreadSafety
 
         var tasks = Enumerable.Range(0, ThreadCount).Select(_ => Task.Run(() =>
         {
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             results.Add(cmat.Hash);
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.Equal(ThreadCount, results.Count);
         Assert.Single(results.Distinct()); // All should return the same hash
@@ -318,12 +321,12 @@ public class UnitTestCMatThreadSafety
         var tasks = Enumerable.Range(0, ThreadCount).Select(_ => Task.Run(() =>
         {
             var dst = new CMat();
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat.CopyTo(dst);
             results.Add(dst);
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TestTimeout);
+        await Task.WhenAll(tasks).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.Equal(ThreadCount, results.Count);
         foreach (var copy in results)
@@ -345,17 +348,17 @@ public class UnitTestCMatThreadSafety
 
         var copy1 = Task.Run(() =>
         {
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat1.CopyTo(cmat2);
-        });
+        }, TestContext.Current.CancellationToken);
 
         var copy2 = Task.Run(() =>
         {
-            barrier.SignalAndWait();
+            barrier.SignalAndWait(TestContext.Current.CancellationToken);
             cmat2.CopyTo(cmat1);
-        });
+        }, TestContext.Current.CancellationToken);
 
-        await Task.WhenAll(copy1, copy2).WaitAsync(TestTimeout);
+        await Task.WhenAll(copy1, copy2).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.Equal(cmat1.Width, cmat2.Width);
         Assert.Equal(cmat1.Height, cmat2.Height);
@@ -375,7 +378,8 @@ public class UnitTestCMatThreadSafety
         var cmat = new CMat(mat);
         var errors = new ConcurrentBag<Exception>();
 
-        var cts = new CancellationTokenSource(TestTimeout);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        cts.CancelAfter(TestTimeout);
 
         // Writer task: repeatedly compresses new values
         var writerTask = Task.Run(() =>
@@ -392,7 +396,7 @@ public class UnitTestCMatThreadSafety
                     errors.Add(ex);
                 }
             }
-        }, cts.Token);
+        }, TestContext.Current.CancellationToken);
 
         // Reader tasks: repeatedly decompress while writer is active
         var readerTasks = Enumerable.Range(0, ThreadCount).Select(_ => Task.Run(() =>
@@ -411,9 +415,9 @@ public class UnitTestCMatThreadSafety
                     errors.Add(ex);
                 }
             }
-        }, cts.Token)).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(readerTasks.Append(writerTask)).WaitAsync(TestTimeout);
+        await Task.WhenAll(readerTasks.Append(writerTask)).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
         Assert.Empty(errors);
     }
@@ -444,9 +448,9 @@ public class UnitTestCMatThreadSafety
                     errors.Add(ex);
                 }
             }
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         Assert.Empty(errors);
         Assert.True(cmat.IsInitialized);
@@ -479,7 +483,7 @@ public class UnitTestCMatThreadSafety
                     errors.Add(ex);
                 }
             }
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
         var readerTasks = Enumerable.Range(0, readerCount).Select(_ => Task.Run(() =>
         {
@@ -496,9 +500,9 @@ public class UnitTestCMatThreadSafety
                     errors.Add(ex);
                 }
             }
-        })).ToArray();
+        }, TestContext.Current.CancellationToken)).ToArray();
 
-        await Task.WhenAll(writerTasks.Concat(readerTasks)).WaitAsync(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(writerTasks.Concat(readerTasks)).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         Assert.Empty(errors);
         Assert.True(cmat.IsInitialized);

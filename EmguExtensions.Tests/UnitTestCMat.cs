@@ -440,11 +440,11 @@ public class UnitTestCMat
         using var mat = CreateLargeMat();
         var cmat = new CMat(mat, MatCompressorGZip.Instance);
 
-        var changed = await cmat.ChangeCompressorAsync(MatCompressorBrotli.Instance, reEncodeWithNewCompressor: true);
+        var changed = await cmat.ChangeCompressorAsync(MatCompressorBrotli.Instance, reEncodeWithNewCompressor: true, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(changed);
         Assert.Same(MatCompressorBrotli.Instance, cmat.Decompressor);
-        using var result = await cmat.DecompressAsync();
+        using var result = await cmat.DecompressAsync(TestContext.Current.CancellationToken);
         AssertMatsEqual(mat, result);
     }
 
