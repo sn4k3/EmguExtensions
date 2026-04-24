@@ -257,6 +257,7 @@ EmguExtensions/
     DrawingExtensions.cs        # Color scaling, polygon geometry and vertices
     PointExtensions.cs          # Euclidean distance, rotation around a pivot
     ArrayExtensions.cs          # High-performance uninitialized-memory array copy
+    StreamExtensions.cs         # MemoryStream.ToArrayPerf — copy buffer without zero-init
     CompressionExtensions.cs    # CompressionLevel enum mapping (0–3 → enum)
     StaticObjects.cs            # Internal: line-break character constants
   MatCompressor/
@@ -292,6 +293,11 @@ EmguExtensions.Tests/           # xUnit test suite
   UnitTestFindMethods.cs        # Pixel-find method tests
   UnitTestMatRoi.cs             # MatRoi crop and padding tests
   UnitTestScanMethods.cs        # Scan/stride method tests
+EmguExtensions.Benchmarks/      # BenchmarkDotNet performance benchmarks
+  MatCompressorBenchmarks.cs    # Compress/Decompress measurements across compressors and levels
+  MatToArrayBenchmarks.cs       # Mat-to-array conversion micro-benchmarks
+  RedundantCompressorLevelFilter.cs # Filter to skip redundant compressor/level pairs
+  Program.cs                    # Benchmark runner entry point
 ```
 
 ## Building from Source
