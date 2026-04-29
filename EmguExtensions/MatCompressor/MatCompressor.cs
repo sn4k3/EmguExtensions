@@ -24,6 +24,8 @@
 
 using System.Collections.ObjectModel;
 using System.IO.Compression;
+using DotNext.Buffers;
+using DotNext.IO;
 using Emgu.CV;
 
 namespace EmguExtensions;
@@ -70,6 +72,11 @@ public abstract class MatCompressor
     public static CompressionLevel DefaultCompressionLevel { get; set; } = CompressionLevel.Optimal;
 
     /// <summary>
+    /// Gets or sets the default chunk size (in bytes) to be used for compressing mats in chunks. This can help manage memory usage and improve performance when dealing with large matrices.
+    /// </summary>
+    public static int DefaultBufferChunkSize { get; set; } = 64 * 1024;
+
+    /// <summary>
     /// Gets a compressor by its name from the collection of available compressors.
     /// </summary>
     /// <param name="name">The name of the compressor.</param>
@@ -85,6 +92,41 @@ public abstract class MatCompressor
     /// Gets the name of the compressor
     /// </summary>
     public abstract string Name { get; }
+
+    /// <summary>
+    /// Gets the growth strategy used by stream-based compressors.
+    /// </summary>
+    protected virtual SparseBufferGrowth BufferGrowth => SparseBufferGrowth.Linear;
+
+    /// <summary>
+    /// Determines the optimal buffer chunk size for compressing the given <see cref="Mat"/>. This method can be overridden by derived classes to provide custom logic for determining the chunk size based on the characteristics of the matrix, such as its dimensions, data type, or memory usage. By default, it returns the minimum of a predefined default chunk size and the total byte length of the matrix data to ensure efficient memory usage during compression.
+    /// </summary>
+    /// <param name="mat">The <see cref="Mat"/> for which to determine the optimal buffer chunk size.</param>
+    /// <returns>The optimal buffer chunk size in bytes.</returns>
+    protected virtual int GetOptimalBufferChunkSize(Mat mat)
+    {
+        return Math.Min(DefaultBufferChunkSize, mat.LengthInt32);
+    }
+
+    /// <summary>
+    /// Creates a sparse byte buffer for stream-based compressors.
+    /// </summary>
+    /// <param name="mat">The <see cref="Mat"/> to compress.</param>
+    /// <returns>A sparse byte buffer sized for the source matrix.</returns>
+    protected SparseBufferWriter<byte> CreateCompressionBuffer(Mat mat)
+    {
+        return new SparseBufferWriter<byte>(GetOptimalBufferChunkSize(mat), BufferGrowth);
+    }
+
+    /// <summary>
+    /// Creates a writable stream over a sparse compression buffer.
+    /// </summary>
+    /// <param name="buffer">The sparse byte buffer.</param>
+    /// <returns>A writable stream backed by <paramref name="buffer"/>.</returns>
+    protected static Stream CreateCompressionStream(SparseBufferWriter<byte> buffer)
+    {
+        return Stream.Create(buffer, true);
+    }
 
     /// <summary>
     /// Compresses the <see cref="Mat"/> into a byte array using the default compression level (<see cref="DefaultCompressionLevel"/>).

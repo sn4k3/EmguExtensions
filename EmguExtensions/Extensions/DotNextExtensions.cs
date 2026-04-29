@@ -21,30 +21,28 @@
 *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 *   SOFTWARE.
 */
-using System.IO.Compression;
+using DotNext.Buffers;
 
 namespace EmguExtensions;
 
 /// <summary>
-/// Provides extension methods for mapping integer compression levels to
-/// the <see cref="CompressionLevel"/> enum values.
+/// Provides extension methods for the DotNext library, enhancing the functionality of its types and enabling seamless integration.
 /// </summary>
-public static class CompressionExtensions
+public static class DotNextExtensions
 {
     /// <summary>
-    /// Maps an integer compression level (0-3) to the corresponding <see cref="CompressionLevel"/> enum value.
+    /// Copies the contents of the <see cref="SparseBufferWriter{T}"/> to a new array and returns it.
     /// </summary>
-    /// <param name="level">The integer compression level (0-3).</param>
-    /// <returns>The corresponding <see cref="CompressionLevel"/> enum value.</returns>
-    public static CompressionLevel GetCompressionLevel(int level)
+    /// <param name="buffer">The buffer to copy from.</param>
+    /// <typeparam name="T">The type of elements in the buffer.</typeparam>
+    /// <returns>A new array containing the copied elements.</returns>
+    public static T[] ToArray<T>(this SparseBufferWriter<T> buffer) where T : struct
     {
-        return level switch
-        {
-            0 => CompressionLevel.NoCompression,
-            1 => CompressionLevel.Fastest,
-            2 => CompressionLevel.Optimal,
-            _ when level >= 3 => CompressionLevel.SmallestSize,
-            _ => throw new ArgumentOutOfRangeException(nameof(level), level, "Compression level must be non-negative.")
-        };
+        var writtenCount = checked((int)buffer.WrittenCount);
+        if (writtenCount == 0) return [];
+
+        var output = GC.AllocateUninitializedArray<T>(writtenCount);
+        buffer.CopyTo(output);
+        return output;
     }
 }

@@ -339,7 +339,16 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
     /// <inheritdoc />
     public IEnumerator<Point> GetEnumerator()
     {
-        return ((IEnumerable<Point>)Vector.ToArray()).GetEnumerator();
+        ThrowIfDisposed();
+        return Enumerate(_vector).GetEnumerator();
+
+        static IEnumerable<Point> Enumerate(VectorOfPoint vector)
+        {
+            for (int i = 0; i < vector.Size; i++)
+            {
+                yield return vector[i];
+            }
+        }
     }
 
     /// <inheritdoc />

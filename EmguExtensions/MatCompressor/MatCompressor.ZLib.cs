@@ -44,26 +44,20 @@ public sealed class MatCompressorZLib : MatCompressor
     /// <inheritdoc />
     protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
     {
-        using var compressedStream = EmguExtensions.RecyclableMemoryStreamManager.GetStream();
-        using (var zLibStream = new ZLibStream(compressedStream, compressionLevel, leaveOpen: true))
+        using var buffer = CreateCompressionBuffer(src);
+        using (var zLibStream = new ZLibStream(CreateCompressionStream(buffer), compressionLevel))
         {
             src.CopyTo(zLibStream);
         }
 
-        return compressedStream.ToArrayPerf();
+        return buffer.ToArray();
     }
 
     /// <inheritdoc />
     protected override void DecompressCore(byte[] compressedBytes, Mat dst)
     {
-        unsafe
-        {
-            fixed (byte* pBuffer = compressedBytes)
-            {
-                using var compressedStream = new UnmanagedMemoryStream(pBuffer, compressedBytes.Length);
-                using var zLibStream = new ZLibStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
-                zLibStream.ReadExactly(dst.GetSpan<byte>());
-            }
-        }
+        using var compressedStream = new MemoryStream(compressedBytes, writable: false);
+        using var zLibStream = new ZLibStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
+        zLibStream.ReadExactly(dst.GetSpan<byte>());
     }
 }

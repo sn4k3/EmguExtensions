@@ -44,28 +44,21 @@ public sealed class MatCompressorBrotli : MatCompressor
     /// <inheritdoc />
     protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
     {
-        using var compressedStream = EmguExtensions.RecyclableMemoryStreamManager.GetStream();
-        using (var brotliStream = new BrotliStream(compressedStream, compressionLevel, leaveOpen: true))
+        using var buffer = CreateCompressionBuffer(src);
+        using (var brotliStream = new BrotliStream(CreateCompressionStream(buffer), compressionLevel))
         {
             src.CopyTo(brotliStream);
         }
 
-        return compressedStream.TryGetBuffer(out var buffer)
-            ? buffer.ToArray()
-            : compressedStream.ToArray();
+        return buffer.ToArray();
     }
 
     /// <inheritdoc />
     protected override void DecompressCore(byte[] compressedBytes, Mat dst)
     {
-        unsafe
+        if (!BrotliDecoder.TryDecompress(compressedBytes, dst.GetSpan<byte>(), out _))
         {
-            fixed (byte* pBuffer = compressedBytes)
-            {
-                using var compressedStream = new UnmanagedMemoryStream(pBuffer, compressedBytes.Length);
-                using var brotliStream = new BrotliStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
-                brotliStream.ReadExactly(dst.GetSpan<byte>());
-            }
+            throw new InvalidDataException("Failed to decompress Brotli data.");
         }
     }
 }

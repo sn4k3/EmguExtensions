@@ -23,7 +23,6 @@
 */
 
 using Emgu.CV.Structure;
-using Microsoft.IO;
 using System.Drawing;
 
 namespace EmguExtensions;
@@ -33,8 +32,6 @@ namespace EmguExtensions;
 /// </summary>
 public static partial class EmguExtensions
 {
-    internal static readonly RecyclableMemoryStreamManager RecyclableMemoryStreamManager = new();
-
     /// <summary>
     /// Gets the scalar value representing the color black with full opacity.
     /// </summary>

@@ -44,26 +44,20 @@ public sealed class MatCompressorGZip : MatCompressor
     /// <inheritdoc />
     protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
     {
-        using var compressedStream = EmguExtensions.RecyclableMemoryStreamManager.GetStream();
-        using (var gzipStream = new GZipStream(compressedStream, compressionLevel, leaveOpen: true))
+        using var buffer = CreateCompressionBuffer(src);
+        using (var gzipStream = new GZipStream(CreateCompressionStream(buffer), compressionLevel))
         {
             src.CopyTo(gzipStream);
         }
 
-        return compressedStream.ToArrayPerf();
+        return buffer.ToArray();
     }
 
     /// <inheritdoc />
     protected override void DecompressCore(byte[] compressedBytes, Mat dst)
     {
-        unsafe
-        {
-            fixed (byte* pBuffer = compressedBytes)
-            {
-                using var compressedStream = new UnmanagedMemoryStream(pBuffer, compressedBytes.Length);
-                using var gZipStream = new GZipStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
-                gZipStream.ReadExactly(dst.GetSpan<byte>());
-            }
-        }
+        using var compressedStream = new MemoryStream(compressedBytes, writable: false);
+        using var gZipStream = new GZipStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
+        gZipStream.ReadExactly(dst.GetSpan<byte>());
     }
 }

@@ -23,6 +23,7 @@
 */
 
 using CommunityToolkit.HighPerformance;
+using DotNext.Buffers;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
@@ -33,7 +34,6 @@ using System.IO.Hashing;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 using Point = System.Drawing.Point;
 using Size = System.Drawing.Size;
 
@@ -487,6 +487,10 @@ public static partial class EmguExtensions
         {
             if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
                 throw new InvalidOperationException("Cannot create an UnmanagedMemoryStream from an empty or uninitialized Mat.");
+
+            if (!src.IsContinuous)
+                throw new NotSupportedException("UnmanagedMemoryStream requires a continuous Mat.");
+
             var length = src.LengthInt32;
             unsafe
             {
@@ -1276,15 +1280,15 @@ public static partial class EmguExtensions
         /// <param name="thresholdGrey">Value to threshold the grey, below or equal to this value will set to 0, otherwise <paramref name="thresholdMaxGrey"/></param>
         /// <param name="thresholdMaxGrey">Grey value to set when the threshold is above the limit.</param>
         /// <returns></returns>
-        public List<GreyStride> ScanStrides(int strideLimit = 0, bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false, byte thresholdGrey = 0, byte thresholdMaxGrey = byte.MaxValue)
+        public GreyStride[] ScanStrides(int strideLimit = 0, bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false, byte thresholdGrey = 0, byte thresholdMaxGrey = byte.MaxValue)
         {
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
             ArgumentOutOfRangeException.ThrowIfNegative(strideLimit);
             ArgumentOutOfRangeException.ThrowIfEqual(strideLimit, 1);
 
-            var result = new List<GreyStride>();
+            if (src.IsEmpty) return [];
 
-            if (src.IsEmpty) return result;
+            using var result = new BufferWriterSlim<GreyStride>(stackalloc GreyStride[128]);
 
             int i = 0;
             int x = 0;
@@ -1392,7 +1396,8 @@ public static partial class EmguExtensions
                 result.Add(new GreyStride(index, location, stride, grey));
             }
 
-            return result;
+            return result.WrittenSpan.ToArray();
+
         }
 
         /// <summary>
@@ -1404,16 +1409,16 @@ public static partial class EmguExtensions
         /// <param name="startOnFirstPositivePixel">True to skip the first sequence of black pixels, otherwise false.</param>
         /// <param name="excludeBlacks">True to exclude black strides from returning, otherwise false.</param>
         /// <returns></returns>
-        public List<GreyStride> ScanStrides(Func<byte, byte> greyFunc, int strideLimit = 0, bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false)
+        public GreyStride[] ScanStrides(Func<byte, byte> greyFunc, int strideLimit = 0, bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false)
         {
             ArgumentNullException.ThrowIfNull(greyFunc);
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
             ArgumentOutOfRangeException.ThrowIfNegative(strideLimit);
             ArgumentOutOfRangeException.ThrowIfEqual(strideLimit, 1);
 
-            var result = new List<GreyStride>();
+            if (src.IsEmpty) return [];
 
-            if (src.IsEmpty) return result;
+            using var result = new BufferWriterSlim<GreyStride>(stackalloc GreyStride[128]);
 
             int i = 0;
             int x = 0;
@@ -1509,7 +1514,7 @@ public static partial class EmguExtensions
                 result.Add(new GreyStride(index, location, stride, grey));
             }
 
-            return result;
+            return result.WrittenSpan.ToArray();
         }
 
         /// <summary>
@@ -1518,14 +1523,14 @@ public static partial class EmguExtensions
         /// <param name="vertically">True to scan vertically, otherwise horizontally</param>
         /// <param name="thresholdGrey">Value to threshold the grey, less or equal to this value will set to 0, otherwise 255</param>
         /// <param name="offset">Value to offset the coordinates with.</param>
-        /// <returns>List of all lines</returns>
-        public List<GreyLine> ScanLines(bool vertically = false, byte thresholdGrey = 0, Point offset = default)
+        /// <returns>Array of all lines</returns>
+        public GreyLine[] ScanLines(bool vertically = false, byte thresholdGrey = 0, Point offset = default)
         {
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
 
-            var lines = new List<GreyLine>();
+            if (src.IsEmpty) return [];
 
-            if (src.IsEmpty) return lines;
+            using var lines = new BufferWriterSlim<GreyLine>(stackalloc GreyLine[128]);
 
             var matSize = src.Size;
             var useThreshold = thresholdGrey is > byte.MinValue and < byte.MaxValue;
@@ -1621,7 +1626,7 @@ public static partial class EmguExtensions
                 }
             }
 
-            return lines;
+            return lines.WrittenSpan.ToArray();
         }
 
         /// <summary>
@@ -1630,101 +1635,102 @@ public static partial class EmguExtensions
         /// <param name="greyFunc">Function to filter and process the gray value</param>
         /// <param name="vertically">True to scan vertically, otherwise horizontally</param>
         /// <param name="offset">Value to offset the coordinates with.</param>
-        /// <returns>List of all lines</returns>
-        public List<GreyLine> ScanLines(Func<byte, byte> greyFunc, bool vertically = false, Point offset = default)
+        /// <returns>Array of all lines</returns>
+        public GreyLine[] ScanLines(Func<byte, byte> greyFunc, bool vertically = false, Point offset = default)
         {
             ArgumentNullException.ThrowIfNull(greyFunc);
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
 
-            var lines = new List<GreyLine>();
+            if (src.IsEmpty) return [];
 
-            if (src.IsEmpty) return lines;
-            var matSize = src.Size;
+            using var lines = new BufferWriterSlim<GreyLine>(stackalloc GreyLine[128]);
 
-            GreyLine line = default;
+                var matSize = src.Size;
 
-            byte grey;
-            int x;
-            int y;
+                GreyLine line = default;
 
-            if (vertically)
-            {
-                var span = src.GetReadOnlySpan2D<byte>();
-                for (x = 0; x < matSize.Width; x++)
+                byte grey;
+                int x;
+                int y;
+
+                if (vertically)
                 {
-                    line.StartX = x + offset.X;
-                    line.StartY = offset.Y;
-                    line.EndX = x + offset.X;
-                    line.EndY = offset.Y;
-                    line.Grey = 0;
-
-                    for (y = 0; y < matSize.Height; y++)
-                    {
-                        grey = greyFunc(span[y, x]);
-
-                        if (line.Grey == 0)
-                        {
-                            if (grey == 0) continue;
-                            line.StartY = y + offset.Y;
-                            line.Grey = grey;
-                            continue;
-                        }
-
-                        if (grey == line.Grey) continue;
-                        line.EndY = y - 1 + offset.Y;
-                        lines.Add(line);
-
-                        line.Grey = 0;
-                        y--;
-                    }
-
-                    if (line.Grey > 0)
-                    {
-                        line.EndY = y - 1 + offset.Y;
-                        lines.Add(line);
-                    }
-                }
-            }
-            else
-            {
-                for (y = 0; y < matSize.Height; y++)
-                {
-                    var span = src.GetRowSpan<byte>(y);
-                    line.StartX = offset.X;
-                    line.StartY = y + offset.Y;
-                    line.EndX = offset.X;
-                    line.EndY = y + offset.Y;
-                    line.Grey = 0;
-
+                    var span = src.GetReadOnlySpan2D<byte>();
                     for (x = 0; x < matSize.Width; x++)
                     {
-                        grey = greyFunc(span[x]);
+                        line.StartX = x + offset.X;
+                        line.StartY = offset.Y;
+                        line.EndX = x + offset.X;
+                        line.EndY = offset.Y;
+                        line.Grey = 0;
 
-                        if (line.Grey == 0)
+                        for (y = 0; y < matSize.Height; y++)
                         {
-                            if (grey == 0) continue;
-                            line.StartX = x + offset.X;
-                            line.Grey = grey;
-                            continue;
+                            grey = greyFunc(span[y, x]);
+
+                            if (line.Grey == 0)
+                            {
+                                if (grey == 0) continue;
+                                line.StartY = y + offset.Y;
+                                line.Grey = grey;
+                                continue;
+                            }
+
+                            if (grey == line.Grey) continue;
+                            line.EndY = y - 1 + offset.Y;
+                            lines.Add(line);
+
+                            line.Grey = 0;
+                            y--;
                         }
 
-                        if (grey == line.Grey) continue;
-                        line.EndX = x - 1 + offset.X;
-                        lines.Add(line);
-
-                        line.Grey = 0;
-                        x--;
-                    }
-
-                    if (line.Grey > 0)
-                    {
-                        line.EndX = x - 1 + offset.X;
-                        lines.Add(line);
+                        if (line.Grey > 0)
+                        {
+                            line.EndY = y - 1 + offset.Y;
+                            lines.Add(line);
+                        }
                     }
                 }
-            }
+                else
+                {
+                    for (y = 0; y < matSize.Height; y++)
+                    {
+                        var span = src.GetRowSpan<byte>(y);
+                        line.StartX = offset.X;
+                        line.StartY = y + offset.Y;
+                        line.EndX = offset.X;
+                        line.EndY = y + offset.Y;
+                        line.Grey = 0;
 
-            return lines;
+                        for (x = 0; x < matSize.Width; x++)
+                        {
+                            grey = greyFunc(span[x]);
+
+                            if (line.Grey == 0)
+                            {
+                                if (grey == 0) continue;
+                                line.StartX = x + offset.X;
+                                line.Grey = grey;
+                                continue;
+                            }
+
+                            if (grey == line.Grey) continue;
+                            line.EndX = x - 1 + offset.X;
+                            lines.Add(line);
+
+                            line.Grey = 0;
+                            x--;
+                        }
+
+                        if (line.Grey > 0)
+                        {
+                            line.EndX = x - 1 + offset.X;
+                            lines.Add(line);
+                        }
+                    }
+                }
+
+                return lines.WrittenSpan.ToArray();
         }
         #endregion
 
@@ -1862,10 +1868,11 @@ public static partial class EmguExtensions
         /// </summary>
         /// <param name="compression">The contour approximation method.</param>
         /// <param name="threshold">If <see langword="true"/>, applies a binary threshold before extracting contours.</param>
-        /// <returns>An IEnumerable of SVG path data strings.</returns>
-        public IEnumerable<string> GetSvgPath(ChainApproxMethod compression = ChainApproxMethod.ChainApproxSimple, bool threshold = true)
+        /// <returns>A list of SVG path data strings.</returns>
+        public List<string> GetSvgPath(ChainApproxMethod compression = ChainApproxMethod.ChainApproxSimple, bool threshold = true)
         {
             Mat mat = src;
+            var paths = new List<string>();
             try
             {
                 if (threshold)
@@ -1876,49 +1883,58 @@ public static partial class EmguExtensions
 
                 using var contours = mat.FindContours(out var hierarchy, RetrType.Tree, compression);
 
-                var sb = new StringBuilder(256);
-                for (int i = 0; i < contours.Size; i++)
+                var buffer = new BufferWriterSlim<char>(stackalloc char[512]);
+                try
                 {
-                    // Cache the inner contour to avoid repeated native interop indexer calls
-                    var contour = contours[i];
-
-                    if (hierarchy[i, EmguContour.HierarchyParent] == -1) // Top hierarchy
+                    for (int i = 0; i < contours.Size; i++)
                     {
-                        if (sb.Length > 0)
+                        // Cache the inner contour to avoid repeated native interop indexer calls
+                        var contour = contours[i];
+
+                        if (hierarchy[i, EmguContour.HierarchyParent] == -1) // Top hierarchy
                         {
-                            yield return sb.ToString();
-                            sb.Clear();
+                            if (buffer.WrittenCount > 0)
+                            {
+                                paths.Add(buffer.ToString());
+                                buffer.Clear();
+                            }
                         }
-                    }
-                    else
-                    {
-                        sb.Append(' ');
+                        else
+                        {
+
+                            buffer.Add(' ');
+                        }
+
+                        var firstPoint = contour[0];
+                        buffer.Add('M');
+                        buffer.Add(' ');
+                        buffer.Format(firstPoint.X);
+                        buffer.Add(' ');
+                        buffer.Format(firstPoint.Y);
+                        buffer.Write(" L");
+                        var contourSize = contour.Size;
+                        for (int x = 1; x < contourSize; x++)
+                        {
+                            var pt = contour[x];
+                            buffer.Add(' ');
+                            buffer.Format(pt.X);
+                            buffer.Add(' ');
+                            buffer.Format(pt.Y);
+                        }
+                        buffer.Write(" Z");
                     }
 
-                    var firstPoint = contour[0];
-                    sb.Append('M')
-                        .Append(' ')
-                        .Append(firstPoint.X)
-                        .Append(' ')
-                        .Append(firstPoint.Y)
-                        .Append(" L");
-
-                    var contourSize = contour.Size;
-                    for (int x = 1; x < contourSize; x++)
+                    if (buffer.WrittenCount > 0)
                     {
-                        var pt = contour[x];
-                        sb.Append(' ')
-                            .Append(pt.X)
-                            .Append(' ')
-                            .Append(pt.Y);
+                        paths.Add(buffer.ToString());
                     }
-                    sb.Append(" Z");
                 }
-
-                if (sb.Length > 0)
+                finally
                 {
-                    yield return sb.ToString();
+                    buffer.Dispose();
                 }
+
+                return paths;
             }
             finally
             {

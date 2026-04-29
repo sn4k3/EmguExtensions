@@ -298,7 +298,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
                 count++;
             }
 
-            if (sortByDistance) items[i] = items[i].OrderBy(tuple => tuple.Distance).ToArray();
+            if (sortByDistance) Array.Sort(items[i], (left, right) => left.Distance.CompareTo(right.Distance));
         }
 
         return items;

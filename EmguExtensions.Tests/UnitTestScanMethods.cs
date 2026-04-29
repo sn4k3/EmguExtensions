@@ -77,7 +77,7 @@ public class UnitTestScanMethods
     #region ScanStrides — empty / trivial
 
     [Fact]
-    public void ScanStrides_EmptyMat_ReturnsEmptyList()
+    public void ScanStrides_EmptyMat_ReturnsEmptyArray()
     {
         using var mat = new Mat();
         var result = mat.ScanStrides();
@@ -104,7 +104,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat1D(0, 0, 255, 255);
         var result = mat.ScanStrides();
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(S(0, 0, 0, 2, 0), result[0]);
         Assert.Equal(S(2, 2, 0, 2, 255), result[1]);
     }
@@ -116,7 +116,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat1D(0, 255, 0);
         var result = mat.ScanStrides();
 
-        Assert.Equal(3, result.Count);
+        Assert.Equal(3, result.Length);
         Assert.Equal(S(0, 0, 0, 1, 0), result[0]);
         Assert.Equal(S(1, 1, 0, 1, 255), result[1]);
         Assert.Equal(S(2, 2, 0, 1, 0), result[2]);
@@ -143,7 +143,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat1D(0, 0, 0, 0);
         var result = mat.ScanStrides(strideLimit: 2);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(S(0, 0, 0, 2, 0), result[0]);
         Assert.Equal(S(2, 2, 0, 2, 0), result[1]);
     }
@@ -212,7 +212,7 @@ public class UnitTestScanMethods
         var withBreak = mat.ScanStrides(breakOnRows: true);
         var withoutBreak = mat.ScanStrides(breakOnRows: false);
 
-        Assert.Equal(2, withBreak.Count);
+        Assert.Equal(2, withBreak.Length);
         Assert.Single(withoutBreak);
     }
 
@@ -241,7 +241,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat1D(10, 20, 200, 210);
         var result = mat.ScanStrides(thresholdGrey: 128);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(0, result[0].Grey);
         Assert.Equal(255, result[1].Grey);
     }
@@ -253,7 +253,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat1D(10, 10, 200);
         var result = mat.ScanStrides(thresholdGrey: 0);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(10, result[0].Grey);
         Assert.Equal(200, result[1].Grey);
     }
@@ -269,7 +269,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat1D(10, 20, 200, 210);
         var result = mat.ScanStrides(x => x > 128 ? (byte)0 : (byte)255);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(255, result[0].Grey);
         Assert.Equal(0, result[1].Grey);
     }
@@ -290,7 +290,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat1D(1, 2, 3, 4);
         var result = mat.ScanStrides(_ => (byte)255, strideLimit: 2);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(S(0, 0, 0, 2, 255), result[0]);
         Assert.Equal(S(2, 2, 0, 2, 255), result[1]);
     }
@@ -318,14 +318,14 @@ public class UnitTestScanMethods
     #region ScanLines — empty / trivial
 
     [Fact]
-    public void ScanLines_EmptyMat_ReturnsEmptyList()
+    public void ScanLines_EmptyMat_ReturnsEmptyArray()
     {
         using var mat = new Mat();
         Assert.Empty(mat.ScanLines());
     }
 
     [Fact]
-    public void ScanLines_AllBlack_ReturnsEmptyList()
+    public void ScanLines_AllBlack_ReturnsEmptyArray()
     {
         using var mat = CreateMat2D([[0, 0, 0], [0, 0, 0]]);
         Assert.Empty(mat.ScanLines());
@@ -353,7 +353,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat2D([[255, 0, 128]]);
         var result = mat.ScanLines();
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(L(0, 0, 0, 0, 255), result[0]);
         Assert.Equal(L(2, 0, 2, 0, 128), result[1]);
     }
@@ -383,7 +383,7 @@ public class UnitTestScanMethods
         ]);
         var result = mat.ScanLines();
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(0, result[0].StartY);
         Assert.Equal(2, result[1].StartY);
     }
@@ -434,7 +434,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat2D([[10, 200]]);
         var result = mat.ScanLines(thresholdGrey: 0);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(10, result[0].Grey);
         Assert.Equal(200, result[1].Grey);
     }
@@ -484,7 +484,7 @@ public class UnitTestScanMethods
         using var mat = CreateMat2D([[255], [0], [128]]);
         var result = mat.ScanLines(vertically: true);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.Length);
         Assert.Equal(L(0, 0, 0, 0, 255), result[0]);
         Assert.Equal(L(0, 2, 0, 2, 128), result[1]);
     }

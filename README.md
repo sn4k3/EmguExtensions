@@ -172,57 +172,57 @@ All compressors are singletons accessed via `Instance` (e.g., `MatCompressorBrot
 ```
 BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.8246/25H2/2025Update/HudsonValley2)
 AMD Ryzen 9 7845HX with Radeon Graphics 3.00GHz, 1 CPU, 24 logical and 12 physical cores
-.NET SDK 10.0.201
-  [Host]     : .NET 10.0.5 (10.0.5, 10.0.526.15411), X64 RyuJIT x86-64-v4
-  Job-MTJJIS : .NET 10.0.5 (10.0.5, 10.0.526.15411), X64 RyuJIT x86-64-v4
+.NET SDK 10.0.203
+  [Host]     : .NET 10.0.7 (10.0.7, 10.0.726.21808), X64 RyuJIT x86-64-v4
+  Job-MTJJIS : .NET 10.0.7 (10.0.7, 10.0.726.21808), X64 RyuJIT x86-64-v4
 
 MaxIterationCount=16
 
 | Method     | MatSize | CompressorName | Level         | Mean        | Error       | StdDev      | Gen0     | Gen1     | Gen2     | Allocated |
 |----------- |-------- |--------------- |-------------- |------------:|------------:|------------:|---------:|---------:|---------:|----------:|
-| Compress   | 1920    | Brotli         | NoCompression |    332.7 us |    41.19 us |    40.46 us |        - |        - |        - |    3216 B |
-| Compress   | 1920    | Brotli         | Fastest       |    341.5 us |    57.30 us |    56.27 us |        - |        - |        - |    2832 B |
-| Compress   | 1920    | ZLib           | Fastest       |    557.4 us |    17.84 us |    15.81 us |   1.9531 |        - |        - |   45800 B |
-| Compress   | 1920    | ZLib           | NoCompression |    651.8 us |     9.10 us |     8.52 us | 247.0703 | 247.0703 | 247.0703 | 3692704 B |
-| Compress   | 1920    | GZip           | NoCompression |    665.2 us |    15.21 us |    14.22 us | 246.0938 | 246.0938 | 246.0938 | 3692725 B |
-| Compress   | 1920    | GZip           | Fastest       |    759.1 us |    90.62 us |    89.00 us |   1.9531 |        - |        - |   45808 B |
-| Compress   | 1920    | Deflate        | Fastest       |    770.6 us |    49.59 us |    48.70 us |   1.9531 |        - |        - |   45760 B |
-| Compress   | 1920    | Deflate        | NoCompression |    809.3 us |    53.88 us |    52.92 us | 245.1172 | 245.1172 | 245.1172 | 3692687 B |
-| Compress   | 1920    | None           | NoCompression |    823.4 us |     7.71 us |     6.83 us | 398.4375 | 398.4375 | 398.4375 | 3686548 B |
-| Compress   | 1920    | ZLib           | Optimal       |  1,156.1 us |   101.62 us |    95.06 us |        - |        - |        - |   23568 B |
-| Compress   | 1920    | GZip           | Optimal       |  1,383.6 us |   142.92 us |   140.36 us |        - |        - |        - |   23584 B |
-| Compress   | 1920    | Deflate        | Optimal       |  1,428.1 us |    85.60 us |    84.07 us |        - |        - |        - |   23528 B |
-| Compress   | 1920    | Brotli         | Optimal       |  4,932.8 us |   695.09 us |   682.67 us |        - |        - |        - |    1329 B |
-| Compress   | 1920    | ZLib           | SmallestSize  |  6,819.1 us |    93.58 us |    87.53 us |        - |        - |        - |   15552 B |
-| Compress   | 1920    | GZip           | SmallestSize  |  9,376.0 us |   262.00 us |   257.31 us |        - |        - |        - |   15568 B |
-| Compress   | 1920    | Deflate        | SmallestSize  |  9,454.6 us |   393.20 us |   386.17 us |        - |        - |        - |   15520 B |
-| Compress   | 1920    | PNG            | Optimal       | 16,037.3 us | 1,881.88 us | 1,848.26 us |        - |        - |        - |   25496 B |
-| Compress   | 1920    | PNG            | NoCompression | 16,710.6 us | 1,337.52 us | 1,313.62 us | 375.0000 | 375.0000 | 375.0000 | 3694734 B |
-| Compress   | 1920    | PNG            | Fastest       | 17,097.2 us |   744.32 us |   731.02 us |        - |        - |        - |   25736 B |
-| Compress   | 1920    | PNG            | SmallestSize  | 40,221.4 us | 1,156.69 us | 1,136.03 us |        - |        - |        - |    9280 B |
-| Compress   | 1920    | Brotli         | SmallestSize  | 85,092.8 us | 5,242.87 us | 5,149.20 us |        - |        - |        - |     713 B |
+| Compress   | 1920    | Brotli         | NoCompression |    318.3 us |    14.55 us |    14.29 us |        - |        - |        - |    3200 B |
+| Compress   | 1920    | Brotli         | Fastest       |    332.3 us |    54.77 us |    53.79 us |        - |        - |        - |    2816 B |
+| Compress   | 1920    | None           | NoCompression |    337.8 us |    11.88 us |    11.66 us | 194.3359 | 194.3359 | 194.3359 | 3686483 B |
+| Compress   | 1920    | Deflate        | Fastest       |    636.3 us |    55.72 us |    54.73 us |   1.9531 |        - |        - |   45744 B |
+| Compress   | 1920    | GZip           | Fastest       |    638.2 us |    28.39 us |    27.88 us |   2.4414 |        - |        - |   45792 B |
+| Compress   | 1920    | ZLib           | Fastest       |    640.3 us |    49.51 us |    48.62 us |   2.4414 |        - |        - |   45784 B |
+| Compress   | 1920    | GZip           | NoCompression |    769.6 us |    13.23 us |    12.38 us | 276.3672 | 276.3672 | 276.3672 | 3688281 B |
+| Compress   | 1920    | ZLib           | NoCompression |    770.1 us |    27.85 us |    27.35 us | 284.1797 | 284.1797 | 284.1797 | 3688256 B |
+| Compress   | 1920    | Deflate        | NoCompression |    862.5 us |    14.73 us |    13.78 us | 280.2734 | 280.2734 | 280.2734 | 3688228 B |
+| Compress   | 1920    | Deflate        | Optimal       |  1,303.5 us |    42.47 us |    41.71 us |   0.9766 |        - |        - |   23512 B |
+| Compress   | 1920    | GZip           | Optimal       |  1,305.6 us |    93.40 us |    91.74 us |        - |        - |        - |   23568 B |
+| Compress   | 1920    | ZLib           | Optimal       |  1,353.0 us |    67.70 us |    66.49 us |        - |        - |        - |   23552 B |
+| Compress   | 1920    | Brotli         | Optimal       |  4,997.6 us |   181.04 us |   177.80 us |        - |        - |        - |    1313 B |
+| Compress   | 1920    | GZip           | SmallestSize  |  8,240.1 us |   397.06 us |   389.97 us |        - |        - |        - |   15552 B |
+| Compress   | 1920    | ZLib           | SmallestSize  |  8,380.9 us |   372.70 us |   366.04 us |        - |        - |        - |   15536 B |
+| Compress   | 1920    | Deflate        | SmallestSize  |  8,492.4 us |   427.02 us |   419.39 us |        - |        - |        - |   15504 B |
+| Compress   | 1920    | PNG            | Fastest       | 15,511.5 us | 1,415.48 us | 1,390.19 us |        - |        - |        - |   25736 B |
+| Compress   | 1920    | PNG            | NoCompression | 15,571.9 us |   654.92 us |   643.22 us | 375.0000 | 375.0000 | 375.0000 | 3694733 B |
+| Compress   | 1920    | PNG            | Optimal       | 16,101.5 us |   679.06 us |   666.93 us |        - |        - |        - |   25496 B |
+| Compress   | 1920    | PNG            | SmallestSize  | 35,974.1 us | 2,452.16 us | 2,408.35 us |        - |        - |        - |    9280 B |
+| Compress   | 1920    | Brotli         | SmallestSize  | 66,692.0 us | 9,677.48 us | 9,504.58 us |        - |        - |        - |     692 B |
 |            |         |                |               |             |             |             |          |          |          |           |
-| Decompress | 1920    | Deflate        | Optimal       |    121.6 us |     0.30 us |     0.25 us |        - |        - |        - |     304 B |
-| Decompress | 1920    | Deflate        | Fastest       |    123.1 us |     1.21 us |     1.13 us |        - |        - |        - |     304 B |
-| Decompress | 1920    | None           | NoCompression |    140.3 us |     1.06 us |     0.99 us |        - |        - |        - |         - |
-| Decompress | 1920    | Deflate        | SmallestSize  |    147.8 us |    13.29 us |    13.05 us |        - |        - |        - |     304 B |
-| Decompress | 1920    | Deflate        | NoCompression |    158.2 us |     9.75 us |     9.12 us |        - |        - |        - |     304 B |
-| Decompress | 1920    | ZLib           | SmallestSize  |    168.0 us |     1.26 us |     1.12 us |        - |        - |        - |     336 B |
-| Decompress | 1920    | ZLib           | Optimal       |    174.6 us |     1.64 us |     1.53 us |        - |        - |        - |     336 B |
-| Decompress | 1920    | ZLib           | Fastest       |    175.2 us |     1.83 us |     1.71 us |        - |        - |        - |     336 B |
-| Decompress | 1920    | GZip           | SmallestSize  |    181.5 us |     1.76 us |     1.65 us |        - |        - |        - |     336 B |
-| Decompress | 1920    | ZLib           | NoCompression |    201.9 us |     3.73 us |     3.49 us |        - |        - |        - |     336 B |
-| Decompress | 1920    | GZip           | NoCompression |    209.3 us |     2.43 us |     2.28 us |        - |        - |        - |     336 B |
-| Decompress | 1920    | GZip           | Fastest       |    214.5 us |    25.51 us |    25.06 us |        - |        - |        - |     336 B |
-| Decompress | 1920    | GZip           | Optimal       |    241.6 us |     4.62 us |     4.54 us |        - |        - |        - |     336 B |
-| Decompress | 1920    | Brotli         | NoCompression |  1,701.2 us |    41.09 us |    34.31 us |        - |        - |        - |     208 B |
-| Decompress | 1920    | Brotli         | Fastest       |  1,976.2 us |    36.79 us |    34.41 us |        - |        - |        - |     209 B |
-| Decompress | 1920    | Brotli         | SmallestSize  |  2,514.9 us |    45.01 us |    35.14 us |        - |        - |        - |     209 B |
-| Decompress | 1920    | Brotli         | Optimal       |  2,529.3 us |    10.05 us |     8.91 us |        - |        - |        - |     209 B |
-| Decompress | 1920    | PNG            | Fastest       |  7,030.7 us |    54.41 us |    50.89 us |        - |        - |        - |      88 B |
-| Decompress | 1920    | PNG            | Optimal       |  7,079.6 us |    39.79 us |    37.22 us |        - |        - |        - |      88 B |
-| Decompress | 1920    | PNG            | NoCompression |  7,939.6 us |    97.27 us |    90.98 us |        - |        - |        - |      88 B |
-| Decompress | 1920    | PNG            | SmallestSize  | 10,217.6 us |    94.53 us |    88.43 us |        - |        - |        - |      88 B |
+| Decompress | 1920    | Deflate        | SmallestSize  |    113.4 us |     1.35 us |     1.19 us |        - |        - |        - |     280 B |
+| Decompress | 1920    | Deflate        | Fastest       |    119.7 us |     2.57 us |     2.52 us |        - |        - |        - |     280 B |
+| Decompress | 1920    | Deflate        | Optimal       |    123.6 us |     3.56 us |     3.50 us |        - |        - |        - |     280 B |
+| Decompress | 1920    | Deflate        | NoCompression |    145.0 us |     2.05 us |     1.82 us |        - |        - |        - |     280 B |
+| Decompress | 1920    | None           | NoCompression |    147.1 us |     1.93 us |     1.71 us |        - |        - |        - |         - |
+| Decompress | 1920    | ZLib           | Fastest       |    157.1 us |     1.58 us |     1.32 us |        - |        - |        - |     312 B |
+| Decompress | 1920    | GZip           | Fastest       |    161.6 us |     2.30 us |     1.92 us |        - |        - |        - |     312 B |
+| Decompress | 1920    | GZip           | Optimal       |    162.2 us |     2.07 us |     1.93 us |        - |        - |        - |     312 B |
+| Decompress | 1920    | GZip           | SmallestSize  |    168.2 us |     8.01 us |     7.86 us |        - |        - |        - |     312 B |
+| Decompress | 1920    | ZLib           | Optimal       |    177.4 us |     1.59 us |     1.41 us |        - |        - |        - |     312 B |
+| Decompress | 1920    | GZip           | NoCompression |    182.6 us |     1.61 us |     1.50 us |        - |        - |        - |     312 B |
+| Decompress | 1920    | ZLib           | SmallestSize  |    197.6 us |     8.23 us |     8.08 us |        - |        - |        - |     312 B |
+| Decompress | 1920    | ZLib           | NoCompression |    225.5 us |    13.96 us |    13.71 us |        - |        - |        - |     312 B |
+| Decompress | 1920    | Brotli         | NoCompression |  1,560.4 us |    24.39 us |    21.62 us |        - |        - |        - |         - |
+| Decompress | 1920    | Brotli         | Fastest       |  2,107.5 us |   267.52 us |   262.74 us |        - |        - |        - |         - |
+| Decompress | 1920    | Brotli         | SmallestSize  |  2,354.4 us |    49.89 us |    49.00 us |        - |        - |        - |         - |
+| Decompress | 1920    | Brotli         | Optimal       |  3,384.4 us |   254.81 us |   250.26 us |        - |        - |        - |         - |
+| Decompress | 1920    | PNG            | Fastest       |  6,079.8 us |    39.73 us |    35.22 us |        - |        - |        - |      88 B |
+| Decompress | 1920    | PNG            | Optimal       |  6,120.8 us |    43.09 us |    38.19 us |        - |        - |        - |      88 B |
+| Decompress | 1920    | PNG            | NoCompression |  6,830.0 us |    47.14 us |    44.09 us |        - |        - |        - |      88 B |
+| Decompress | 1920    | PNG            | SmallestSize  |  8,797.8 us |    39.41 us |    34.94 us |        - |        - |        - |      88 B |
 ```
 
 ### Mat.ToArray() benchmark

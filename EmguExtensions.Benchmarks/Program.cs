@@ -8,3 +8,4 @@ var compressorConfig = DefaultConfig.Instance
 BenchmarkRunner.Run<MatCompressorBenchmarks>(compressorConfig, args);
 
 //BenchmarkRunner.Run<MatToArrayBenchmarks>(null, args);
+//BenchmarkRunner.Run<BrotliBufferBenchmarks>(null, args);

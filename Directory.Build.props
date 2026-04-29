@@ -15,7 +15,7 @@
         <Authors>Tiago Conceição</Authors>
         <Copyright>Copyright 2026-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
         <Description>A high-performance .NET library that extends Emgu.CV (OpenCV wrapper) with span-based Mat accessors, ROI utilities, pluggable Mat compression (PNG, Deflate, GZip, ZLib, Brotli, Zstd), CMat for memory-efficient compressed image storage, structured contour hierarchy wrappers, and drawing helpers for polygons and multi-line text rendering.</Description>
-        <Version>0.1.0</Version>
+        <Version>0.1.1</Version>
 
         <!-- Package -->
         <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(ProductName).ico</ApplicationIcon>

@@ -44,26 +44,20 @@ public sealed class MatCompressorDeflate : MatCompressor
     /// <inheritdoc />
     protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
     {
-        using var compressedStream = EmguExtensions.RecyclableMemoryStreamManager.GetStream();
-        using (var deflateStream = new DeflateStream(compressedStream, compressionLevel, leaveOpen: true))
+        using var buffer = CreateCompressionBuffer(src);
+        using (var deflateStream = new DeflateStream(CreateCompressionStream(buffer), compressionLevel))
         {
             src.CopyTo(deflateStream);
         }
 
-        return compressedStream.ToArrayPerf();
+        return buffer.ToArray();
     }
 
     /// <inheritdoc />
     protected override void DecompressCore(byte[] compressedBytes, Mat dst)
     {
-        unsafe
-        {
-            fixed (byte* pBuffer = compressedBytes)
-            {
-                using var compressedStream = new UnmanagedMemoryStream(pBuffer, compressedBytes.Length);
-                using var deflateStream = new DeflateStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
-                deflateStream.ReadExactly(dst.GetSpan<byte>());
-            }
-        }
+        using var compressedStream = new MemoryStream(compressedBytes, writable: false);
+        using var deflateStream = new DeflateStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
+        deflateStream.ReadExactly(dst.GetSpan<byte>());
     }
 }
