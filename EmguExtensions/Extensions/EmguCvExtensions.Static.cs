@@ -29,7 +29,7 @@ using System.Drawing;
 
 namespace EmguExtensions;
 
-public static partial class EmguExtensions
+public static partial class EmguCvExtensions
 {
     /// <summary>
     /// Correct openCV thickness which always results larger than specified

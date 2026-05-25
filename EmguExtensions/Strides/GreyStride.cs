@@ -27,7 +27,7 @@ using System.Drawing;
 namespace EmguExtensions;
 
 /// <summary>
-/// Represents a contiguous run of pixels with the same grey value produced by <see cref="EmguExtensions"/> stride scans.
+/// Represents a contiguous run of pixels with the same grey value produced by <see cref="EmguCvExtensions"/> stride scans.
 /// </summary>
 /// <param name="Index">Zero-based offset of the first pixel of the stride in the source span.</param>
 /// <param name="Location">Coordinates of the first pixel of the stride in the source image.</param>

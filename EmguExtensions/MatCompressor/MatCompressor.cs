@@ -77,7 +77,19 @@ public abstract class MatCompressor
     public static int DefaultBufferChunkSize { get; set; } = 64 * 1024;
 
     /// <summary>
-    /// Gets a compressor by its name from the collection of available compressors.
+    /// Gets a compressor by its <see cref="Id"/> from the collection of available compressors.
+    /// </summary>
+    /// <param name="id">The ID of the compressor.</param>
+    /// <returns>The compressor with the specified ID, or null if not found.</returns>
+    public static MatCompressor? GetCompressorById(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        return AvailableCompressors.FirstOrDefault(compressor =>
+            compressor.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Gets a compressor by its <see cref="Name"/> from the collection of available compressors.
     /// </summary>
     /// <param name="name">The name of the compressor.</param>
     /// <returns>The compressor with the specified name, or null if not found.</returns>
@@ -89,9 +101,22 @@ public abstract class MatCompressor
     }
 
     /// <summary>
+    /// Gets a unique identifier for the compressor, combining the provider and name properties.
+    /// This can be useful for distinguishing between different compressors, especially if multiple compressors share the same name but come from different providers or libraries.
+    /// </summary>
+    public string Id => $"{Provider}#{Name}";
+
+    /// <summary>
     /// Gets the name of the compressor
     /// </summary>
     public abstract string Name { get; }
+
+    /// <summary>
+    /// Gets the provider or library used by this compressor, if applicable.
+    /// This can be useful for informational purposes or to identify the underlying implementation of the compressor (e.g., "Brotli", "ZLib", "LZ4", etc.).
+    /// By default, it returns ".NET" to indicate that the compressor is implemented using .NET's built-in compression libraries, but derived classes can override this property to specify a different provider if they use an external library or custom implementation.
+    /// </summary>
+    public virtual string Provider => ".NET";
 
     /// <summary>
     /// Gets the growth strategy used by stream-based compressors.
@@ -225,7 +250,7 @@ public abstract class MatCompressor
     /// <inheritdoc />
     public override string ToString()
     {
-        return $"Compressor: {Name}";
+        return $"Compressor: {Name}, Provider: {Provider}";
     }
 }
 

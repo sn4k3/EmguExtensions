@@ -23,7 +23,7 @@ public class UnitTestCMatThreadSafety
 
     private static Mat CreateMat(int value = 128)
     {
-        var mat = EmguExtensions.InitMat(new Size(100, 80));
+        var mat = EmguCvExtensions.InitMat(new Size(100, 80));
         mat.SetTo(new MCvScalar(value));
         return mat;
     }

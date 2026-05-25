@@ -11,14 +11,14 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="coverlet.collector" Version="10.0.0">
+        <PackageReference Include="coverlet.collector" Version="10.0.1">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
 
-        <PackageReference Include="Emgu.CV.runtime.mini.macos" Version="4.12.0.5764" />
+        <PackageReference Include="Emgu.CV.runtime.mini.macos" Version="4.13.0.5924" />
         <PackageReference Include="Emgu.CV.runtime.mini.ubuntu-x64" Version="4.12.0.5764" />
-        <PackageReference Include="Emgu.CV.runtime.mini.windows" Version="4.12.0.5764" />
+        <PackageReference Include="Emgu.CV.runtime.mini.windows" Version="4.13.0.5924" />
     </ItemGroup>
 
     <ItemGroup>

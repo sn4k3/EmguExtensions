@@ -19,16 +19,16 @@ public class UnitTestCMat
     // 100×80: top half black (0), bottom half white (255). ~8 000 bytes, well above the 512 threshold.
     private static Mat CreateLargeMat()
     {
-        var mat = EmguExtensions.InitMat(new Size(100, 80));
-        CvInvoke.Rectangle(mat, new Rectangle(0, 40, 100, 40), EmguExtensions.WhiteColor, -1);
+        var mat = EmguCvExtensions.InitMat(new Size(100, 80));
+        CvInvoke.Rectangle(mat, new Rectangle(0, 40, 100, 40), EmguCvExtensions.WhiteColor, -1);
         return mat;
     }
 
     // 10×10 single-channel = 100 bytes, well below the 512 default threshold.
     private static Mat CreateSmallMat()
     {
-        var mat = EmguExtensions.InitMat(new Size(10, 10));
-        CvInvoke.Rectangle(mat, new Rectangle(0, 5, 10, 5), EmguExtensions.WhiteColor, -1);
+        var mat = EmguCvExtensions.InitMat(new Size(10, 10));
+        CvInvoke.Rectangle(mat, new Rectangle(0, 5, 10, 5), EmguCvExtensions.WhiteColor, -1);
         return mat;
     }
 
@@ -204,7 +204,7 @@ public class UnitTestCMat
     public void Compress_CompressedSizeLargerThanRaw_FallsBackToUncompressed()
     {
         // Force Brotli to produce output larger than input by setting a very high threshold and a 1-channel 1×1 mat
-        using var mat = EmguExtensions.InitMat(new Size(1, 1));
+        using var mat = EmguCvExtensions.InitMat(new Size(1, 1));
         var cmat = new CMat(MatCompressorBrotli.Instance) { ThresholdToCompress = 0 };
 
         cmat.Compress(mat);
@@ -218,7 +218,7 @@ public class UnitTestCMat
     public void Compress_OverwritesPreviousCompression()
     {
         using var mat1 = CreateLargeMat();
-        using var mat2 = EmguExtensions.InitMat(new Size(50, 30)); // all black
+        using var mat2 = EmguCvExtensions.InitMat(new Size(50, 30)); // all black
         var cmat = new CMat(mat1);
         var originalLength = cmat.CompressedLength;
 
@@ -572,7 +572,7 @@ public class UnitTestCMat
         var cloneLength = clone.CompressedLength;
 
         // Re-compress with a new mat to change original's bytes
-        using var newMat = EmguExtensions.InitMat(new Size(50, 30));
+        using var newMat = EmguCvExtensions.InitMat(new Size(50, 30));
         original.Compress(newMat);
 
         Assert.Equal(cloneLength, clone.CompressedLength); // clone unaffected
@@ -701,7 +701,7 @@ public class UnitTestCMat
     public void GetHashCode_DifferentBytes_DifferentHash()
     {
         using var mat1 = CreateLargeMat();
-        using var mat2 = EmguExtensions.InitMat(new Size(100, 80)); // all black
+        using var mat2 = EmguCvExtensions.InitMat(new Size(100, 80)); // all black
         var c1 = new CMat(mat1, MatCompressorNone.Instance) { ThresholdToCompress = 0 };
         var c2 = new CMat(mat2, MatCompressorNone.Instance) { ThresholdToCompress = 0 };
 

@@ -1,3 +1,8 @@
+# v0.1.2 (25/05/2026)
+- Add MatCompressor `Id` and `Provider` properties, a `GetCompressorById` helper
+- Add `GetSpanxxxOfBytes` methods to `EmguCvExtensions` to get spans of bytes for image data
+- Rename `EmguExtensions` to `EmguCvExtensions` to not colide with assembly name.
+
 # v0.1.1 (29/04/2026)
 - Improve `MatCompressor.Compress()` to use dotNEXT library `SparseBufferWriter`
 - Improve `EmguExtensions.ScanStrides()` and `EmguExtensions.ScanLines` to use dotNEXT library `BufferWriterSlim`

@@ -30,7 +30,7 @@ namespace EmguExtensions;
 /// <summary>
 /// Provides a collection of constants and static properties for commonly used values in Emgu CV image processing operations, such as predefined colors and anchor points.
 /// </summary>
-public static partial class EmguExtensions
+public static partial class EmguCvExtensions
 {
     /// <summary>
     /// Gets the scalar value representing the color black with full opacity.

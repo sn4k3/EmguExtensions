@@ -9,8 +9,8 @@ public static class MatFactory
     {
         get
         {
-            var mat = EmguExtensions.InitMat(new Size(100, 100));
-            CvInvoke.Rectangle(mat, new Rectangle(50, 50, 50, 50), EmguExtensions.WhiteColor, -1);
+            var mat = EmguCvExtensions.InitMat(new Size(100, 100));
+            CvInvoke.Rectangle(mat, new Rectangle(50, 50, 50, 50), EmguCvExtensions.WhiteColor, -1);
 
             return mat;
         }

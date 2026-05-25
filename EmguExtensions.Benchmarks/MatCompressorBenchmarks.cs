@@ -54,7 +54,7 @@ public class MatCompressorBenchmarks
             span[i] = (byte)(i % 256);
         CvInvoke.Rectangle(_mat,
             new Rectangle(MatSize / 4, MatSize / 4, MatSize / 2, MatSize / 2),
-            EmguExtensions.WhiteColor, -1);
+            EmguCvExtensions.WhiteColor, -1);
 
         // Pre-compress for decompress benchmark.
         _compressedBytes = _compressor.Compress(_mat, Level);

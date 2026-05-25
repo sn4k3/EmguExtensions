@@ -5,7 +5,7 @@ using Emgu.CV.CvEnum;
 namespace EmguExtensions.Tests;
 
 /// <summary>
-/// Tests for <see cref="EmguExtensions.ScanStrides"/> and <see cref="EmguExtensions.ScanLines"/>.
+/// Tests for <see cref="EmguCvExtensions.ScanStrides"/> and <see cref="EmguCvExtensions.ScanLines"/>.
 /// </summary>
 /// <remarks>
 /// Design note: <c>GreyLine</c> is a mutable record struct. Record equality compares all properties, so

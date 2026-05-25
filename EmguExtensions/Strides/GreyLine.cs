@@ -25,7 +25,7 @@
 namespace EmguExtensions;
 
 /// <summary>
-/// Represents a straight run of pixels with the same grey value produced by <see cref="EmguExtensions"/> line scans.
+/// Represents a straight run of pixels with the same grey value produced by <see cref="EmguCvExtensions"/> line scans.
 /// </summary>
 public record struct GreyLine
 {

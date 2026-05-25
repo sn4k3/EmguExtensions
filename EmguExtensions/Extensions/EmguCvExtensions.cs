@@ -39,7 +39,7 @@ using Size = System.Drawing.Size;
 
 namespace EmguExtensions;
 
-public static partial class EmguExtensions
+public static partial class EmguCvExtensions
 {
     extension(DepthType src)
     {
@@ -545,6 +545,25 @@ public static partial class EmguExtensions
         }
 
         /// <summary>
+        /// Gets a span of the matrix data for manipulation or reading.
+        /// The length parameter specifies the number of elements in the span, and the offset
+        /// allows skipping a certain number of elements from the start of the data.
+        /// This method is only applicable for continuous matrices, where all pixel data is
+        /// stored in a single contiguous block of memory. If the matrix is not continuous, an
+        /// exception is thrown, and users should use GetSpan2D instead to access the data in a
+        /// row-wise manner.
+        /// </summary>
+        /// <param name="length">The number of elements in the span.</param>
+        /// <param name="offset">The number of elements to skip from the start of the data.</param>
+        /// <returns>A span representing the matrix data.</returns>
+        /// <exception cref="NotSupportedException">Thrown if the matrix is not continuous.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
+        public Span<byte> GetSpanOfBytes(int length, int offset)
+        {
+            return src.GetSpan<byte>(length, offset);
+        }
+
+        /// <summary>
         /// Gets a span of the matrix data for reading.
         /// The length parameter specifies the number of elements in the span, and the offset
         /// allows skipping a certain number of elements from the start of the data.
@@ -591,6 +610,25 @@ public static partial class EmguExtensions
         }
 
         /// <summary>
+        /// Gets a span of the matrix data for reading.
+        /// The length parameter specifies the number of elements in the span, and the offset
+        /// allows skipping a certain number of elements from the start of the data.
+        /// This method is only applicable for continuous matrices, where all pixel data is
+        /// stored in a single contiguous block of memory. If the matrix is not continuous, an
+        /// exception is thrown, and users should use GetSpan2D instead to access the data in a
+        /// row-wise manner.
+        /// </summary>
+        /// <param name="length">The number of elements in the span.</param>
+        /// <param name="offset">The number of elements to skip from the start of the data.</param>
+        /// <returns>A span representing the matrix data.</returns>
+        /// <exception cref="NotSupportedException">Thrown if the matrix is not continuous.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
+        public ReadOnlySpan<byte> GetReadOnlySpanOfBytes(int length = 0, int offset = 0)
+        {
+            return src.GetReadOnlySpan<byte>(length, offset);
+        }
+
+        /// <summary>
         /// Gets a 2D span of the matrix data for manipulation or reading, allowing access to
         /// the data in a row-wise manner. This method is suitable for non-continuous matrices,
         /// where pixel data  may not be stored in a single contiguous block of memory.
@@ -611,6 +649,20 @@ public static partial class EmguExtensions
                 if (src.IsContinuous) return new(src.DataPointer.ToPointer(), src.Height, step, 0);
                 return new(src.DataPointer.ToPointer(), src.Height, step, src.Step / sizeOfT - step);
             }
+        }
+
+        /// <summary>
+        /// Gets a 2D span of the matrix data for manipulation or reading, allowing access to
+        /// the data in a row-wise manner. This method is suitable for non-continuous matrices,
+        /// where pixel data  may not be stored in a single contiguous block of memory.
+        /// The method calculates the appropriate step size for navigating through the rows
+        /// of the matrix based on its memory layout, ensuring that users can access each row
+        /// correctly regardless of whether the matrix is continuous or not.
+        /// </summary>
+        /// <returns>A 2D span representing the matrix data.</returns>
+        public Span2D<byte> GetSpan2DOfBytes()
+        {
+            return src.GetSpan2D<byte>();
         }
 
         /// <summary>
@@ -635,6 +687,20 @@ public static partial class EmguExtensions
                 if (src.IsContinuous) return new(src.DataPointer.ToPointer(), src.Height, step, 0);
                 return new(src.DataPointer.ToPointer(), src.Height, step, src.Step / sizeOfT - step);
             }
+        }
+
+        /// <summary>
+        /// Gets a 2D span of the matrix data for reading, allowing access to
+        /// the data in a row-wise manner. This method is suitable for non-continuous matrices,
+        /// where pixel data  may not be stored in a single contiguous block of memory.
+        /// The method calculates the appropriate step size for navigating through the rows
+        /// of the matrix based on its memory layout, ensuring that users can access each row
+        /// correctly regardless of whether the matrix is continuous or not.
+        /// </summary>
+        /// <returns>A 2D span representing the matrix data.</returns>
+        public ReadOnlySpan2D<byte> GetReadOnlySpan2DOfBytes()
+        {
+            return src.GetReadOnlySpan2D<byte>();
         }
 
         /// <summary>
@@ -674,6 +740,22 @@ public static partial class EmguExtensions
         /// The ROI coordinates are in pixel units. The returned span width accounts for
         /// the number of channels and element size of the matrix.
         /// </summary>
+        /// <param name="roi">The region of interest rectangle in pixel coordinates.</param>
+        /// <returns>A 2D span representing the matrix data within the ROI.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the ROI extends beyond the matrix boundaries.
+        /// </exception>
+        public Span2D<byte> GetSpan2DOfBytes(Rectangle roi)
+        {
+            return src.GetSpan2D<byte>(roi);
+        }
+
+        /// <summary>
+        /// Gets a 2D span of the matrix data within a specified region of interest (ROI),
+        /// allowing access to the data in a row-wise manner.
+        /// The ROI coordinates are in pixel units. The returned span width accounts for
+        /// the number of channels and element size of the matrix.
+        /// </summary>
         /// <typeparam name="T">The type of data stored in the matrix (e.g., byte, float).</typeparam>
         /// <param name="roi">The region of interest rectangle in pixel coordinates.</param>
         /// <returns>A 2D span representing the matrix data within the ROI.</returns>
@@ -697,6 +779,22 @@ public static partial class EmguExtensions
                 var ptr = IntPtr.Add(src.DataPointer, (roi.Y * src.Step + src.GetByteCount(roi.X))).ToPointer();
                 return new(ptr, roi.Height, roiWidth, pitch);
             }
+        }
+
+        /// <summary>
+        /// Gets a 2D span of the matrix data within a specified region of interest (ROI),
+        /// allowing access to the data in a row-wise manner.
+        /// The ROI coordinates are in pixel units. The returned span width accounts for
+        /// the number of channels and element size of the matrix.
+        /// </summary>
+        /// <param name="roi">The region of interest rectangle in pixel coordinates.</param>
+        /// <returns>A 2D span representing the matrix data within the ROI.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the ROI extends beyond the matrix boundaries.
+        /// </exception>
+        public ReadOnlySpan2D<byte> GetReadOnlySpan2DOfBytes(Rectangle roi)
+        {
+            return src.GetReadOnlySpan2D<byte>(roi);
         }
 
         /// <summary>
@@ -740,6 +838,19 @@ public static partial class EmguExtensions
         }
 
         /// <summary>
+        /// Gets a row span of the matrix data for manipulation, allowing access to a specific row of the matrix.
+        /// </summary>
+        /// <param name="y">The row index.</param>
+        /// <param name="length">The number of elements in the row span.</param>
+        /// <param name="offset">The offset within the row.</param>
+        /// <returns>A span representing the specified row of the matrix.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"></exception>
+        public Span<byte> GetRowSpanOfBytes(int y, int length = 0, int offset = 0)
+        {
+            return src.GetRowSpan<byte>(y, length, offset);
+        }
+
+        /// <summary>
         /// Gets a read-only row span of the matrix data, allowing access to a specific row of the matrix.
         /// </summary>
         /// <typeparam name="T">The type of data stored in the matrix (e.g., byte, float).</typeparam>
@@ -750,6 +861,18 @@ public static partial class EmguExtensions
         public ReadOnlySpan<T> GetReadOnlyRowSpan<T>(int y, int length = 0, int offset = 0) where T : struct
         {
             return src.GetRowSpan<T>(y, length, offset);
+        }
+
+        /// <summary>
+        /// Gets a read-only row span of the matrix data, allowing access to a specific row of the matrix.
+        /// </summary>
+        /// <param name="y">The row index.</param>
+        /// <param name="length">The number of elements in the row span.</param>
+        /// <param name="offset">The offset within the row.</param>
+        /// <returns>A read-only span representing the specified row of the matrix.</returns>
+        public ReadOnlySpan<byte> GetReadOnlyRowSpanOfBytes(int y, int length = 0, int offset = 0)
+        {
+            return src.GetReadOnlyRowSpan<byte>(y, length, offset);
         }
         #endregion
 

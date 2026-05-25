@@ -18,8 +18,8 @@ public class UnitTestEmguContours
     /// </summary>
     private static Mat CreateSingleRectImage(Rectangle rect)
     {
-        var mat = EmguExtensions.InitMat(new Size(200, 200));
-        CvInvoke.Rectangle(mat, rect, EmguExtensions.WhiteColor, -1);
+        var mat = EmguCvExtensions.InitMat(new Size(200, 200));
+        CvInvoke.Rectangle(mat, rect, EmguCvExtensions.WhiteColor, -1);
         return mat;
     }
 
@@ -28,9 +28,9 @@ public class UnitTestEmguContours
     /// </summary>
     private static Mat CreateTwoRectsImage(Rectangle rect1, Rectangle rect2)
     {
-        var mat = EmguExtensions.InitMat(new Size(200, 200));
-        CvInvoke.Rectangle(mat, rect1, EmguExtensions.WhiteColor, -1);
-        CvInvoke.Rectangle(mat, rect2, EmguExtensions.WhiteColor, -1);
+        var mat = EmguCvExtensions.InitMat(new Size(200, 200));
+        CvInvoke.Rectangle(mat, rect1, EmguCvExtensions.WhiteColor, -1);
+        CvInvoke.Rectangle(mat, rect2, EmguCvExtensions.WhiteColor, -1);
         return mat;
     }
 
@@ -40,8 +40,8 @@ public class UnitTestEmguContours
     /// </summary>
     private static Mat CreateDonutImage()
     {
-        var mat = EmguExtensions.InitMat(new Size(200, 200));
-        CvInvoke.Circle(mat, new Point(100, 100), 80, EmguExtensions.WhiteColor, -1);
+        var mat = EmguCvExtensions.InitMat(new Size(200, 200));
+        CvInvoke.Circle(mat, new Point(100, 100), 80, EmguCvExtensions.WhiteColor, -1);
         CvInvoke.Circle(mat, new Point(100, 100), 40, new MCvScalar(0), -1);
         return mat;
     }
@@ -54,10 +54,10 @@ public class UnitTestEmguContours
     /// </summary>
     private static Mat CreateNestedImage()
     {
-        var mat = EmguExtensions.InitMat(new Size(300, 300));
-        CvInvoke.Rectangle(mat, new Rectangle(20, 20, 260, 260), EmguExtensions.WhiteColor, -1);
+        var mat = EmguCvExtensions.InitMat(new Size(300, 300));
+        CvInvoke.Rectangle(mat, new Rectangle(20, 20, 260, 260), EmguCvExtensions.WhiteColor, -1);
         CvInvoke.Rectangle(mat, new Rectangle(60, 60, 180, 180), new MCvScalar(0), -1);
-        CvInvoke.Rectangle(mat, new Rectangle(100, 100, 100, 100), EmguExtensions.WhiteColor, -1);
+        CvInvoke.Rectangle(mat, new Rectangle(100, 100, 100, 100), EmguCvExtensions.WhiteColor, -1);
         return mat;
     }
 
@@ -116,7 +116,7 @@ public class UnitTestEmguContours
     [Fact]
     public void Constructor_FromMat_EmptyImage_IsEmpty()
     {
-        using var mat = EmguExtensions.InitMat(new Size(100, 100));
+        using var mat = EmguCvExtensions.InitMat(new Size(100, 100));
         using var contours = new EmguContours(mat);
 
         Assert.True(contours.IsEmpty);
@@ -204,7 +204,7 @@ public class UnitTestEmguContours
     [Fact]
     public void IsEmpty_NoContours_ReturnsTrue()
     {
-        using var mat = EmguExtensions.InitMat(new Size(50, 50));
+        using var mat = EmguCvExtensions.InitMat(new Size(50, 50));
         using var contours = new EmguContours(mat);
 
         Assert.True(contours.IsEmpty);
@@ -248,7 +248,7 @@ public class UnitTestEmguContours
     [Fact]
     public void TotalSolidArea_EmptyContours_ReturnsZero()
     {
-        using var mat = EmguExtensions.InitMat(new Size(50, 50));
+        using var mat = EmguCvExtensions.InitMat(new Size(50, 50));
         using var contours = new EmguContours(mat);
 
         Assert.Equal(0, contours.TotalSolidArea);
@@ -282,7 +282,7 @@ public class UnitTestEmguContours
     [Fact]
     public void MinSolidArea_EmptyContours_ReturnsZero()
     {
-        using var mat = EmguExtensions.InitMat(new Size(50, 50));
+        using var mat = EmguCvExtensions.InitMat(new Size(50, 50));
         using var contours = new EmguContours(mat);
 
         Assert.Equal(0, contours.MinSolidArea);
@@ -291,7 +291,7 @@ public class UnitTestEmguContours
     [Fact]
     public void MaxSolidArea_EmptyContours_ReturnsZero()
     {
-        using var mat = EmguExtensions.InitMat(new Size(50, 50));
+        using var mat = EmguCvExtensions.InitMat(new Size(50, 50));
         using var contours = new EmguContours(mat);
 
         Assert.Equal(0, contours.MaxSolidArea);
@@ -825,8 +825,8 @@ public class UnitTestEmguContourFamily
     /// </summary>
     private static EmguContours CreateDonutContours()
     {
-        var mat = EmguExtensions.InitMat(new Size(200, 200));
-        CvInvoke.Circle(mat, new Point(100, 100), 80, EmguExtensions.WhiteColor, -1);
+        var mat = EmguCvExtensions.InitMat(new Size(200, 200));
+        CvInvoke.Circle(mat, new Point(100, 100), 80, EmguCvExtensions.WhiteColor, -1);
         CvInvoke.Circle(mat, new Point(100, 100), 40, new MCvScalar(0), -1);
         var contours = new EmguContours(mat, RetrType.Tree);
         mat.Dispose();
@@ -840,10 +840,10 @@ public class UnitTestEmguContourFamily
     /// </summary>
     private static EmguContours CreateNestedContours()
     {
-        var mat = EmguExtensions.InitMat(new Size(300, 300));
-        CvInvoke.Rectangle(mat, new Rectangle(20, 20, 260, 260), EmguExtensions.WhiteColor, -1);
+        var mat = EmguCvExtensions.InitMat(new Size(300, 300));
+        CvInvoke.Rectangle(mat, new Rectangle(20, 20, 260, 260), EmguCvExtensions.WhiteColor, -1);
         CvInvoke.Rectangle(mat, new Rectangle(60, 60, 180, 180), new MCvScalar(0), -1);
-        CvInvoke.Rectangle(mat, new Rectangle(100, 100, 100, 100), EmguExtensions.WhiteColor, -1);
+        CvInvoke.Rectangle(mat, new Rectangle(100, 100, 100, 100), EmguCvExtensions.WhiteColor, -1);
         var contours = new EmguContours(mat, RetrType.Tree);
         mat.Dispose();
         return contours;

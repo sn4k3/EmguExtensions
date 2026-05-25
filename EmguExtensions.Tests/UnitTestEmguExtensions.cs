@@ -23,9 +23,9 @@ public class UnitTestEmguExtensions
     // 100×80 single-channel mat: top half black (0), bottom half white (255).
     private static Mat CreateGradientMat(int width = 100, int height = 80)
     {
-        var mat = EmguExtensions.InitMat(new Size(width, height));
+        var mat = EmguCvExtensions.InitMat(new Size(width, height));
         CvInvoke.Rectangle(mat, new Rectangle(0, height / 2, width, height - height / 2),
-            EmguExtensions.WhiteColor, -1);
+            EmguCvExtensions.WhiteColor, -1);
         return mat;
     }
 
@@ -69,7 +69,7 @@ public class UnitTestEmguExtensions
     [Fact]
     public void IsAllZero_AllZeroMat_ReturnsTrue()
     {
-        using var mat = EmguExtensions.InitMat(new Size(10, 10));
+        using var mat = EmguCvExtensions.InitMat(new Size(10, 10));
         Assert.True(mat.IsAllZero);
     }
 
@@ -83,7 +83,7 @@ public class UnitTestEmguExtensions
     [Fact]
     public void HasNonZero_AllZeroMat_ReturnsFalse()
     {
-        using var mat = EmguExtensions.InitMat(new Size(10, 10));
+        using var mat = EmguCvExtensions.InitMat(new Size(10, 10));
         Assert.False(mat.HasNonZero);
     }
 
@@ -97,7 +97,7 @@ public class UnitTestEmguExtensions
     [Fact]
     public void CountNonZero_AllZeroMat_ReturnsZero()
     {
-        using var mat = EmguExtensions.InitMat(new Size(10, 10));
+        using var mat = EmguCvExtensions.InitMat(new Size(10, 10));
         Assert.Equal(0, mat.CountNonZero);
     }
 

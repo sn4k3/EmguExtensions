@@ -9,9 +9,9 @@ public class UnitTestMatRoi
     // 100×80 mat: top half black (0), bottom half white (255).
     private static Mat CreateMat(int width = 100, int height = 80)
     {
-        var mat = EmguExtensions.InitMat(new Size(width, height));
+        var mat = EmguCvExtensions.InitMat(new Size(width, height));
         CvInvoke.Rectangle(mat, new Rectangle(0, height / 2, width, height - height / 2),
-            EmguExtensions.WhiteColor, -1);
+            EmguCvExtensions.WhiteColor, -1);
         return mat;
     }
 

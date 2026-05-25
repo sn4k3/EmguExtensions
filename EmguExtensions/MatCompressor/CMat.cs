@@ -698,7 +698,7 @@ public class CMat : IEquatable<CMat>
     /// </summary>
     private Mat RawDecompressInternal()
     {
-        if (IsEmpty) return Roi.Size.IsEmpty ? CreateMatZeros() : EmguExtensions.InitMat(Roi.Size, Channels, Depth);
+        if (IsEmpty) return Roi.Size.IsEmpty ? CreateMatZeros() : EmguCvExtensions.InitMat(Roi.Size, Channels, Depth);
 
         var mat = Roi.Size.IsEmpty ? CreateMat() : new Mat(Roi.Size, Depth, Channels);
 
@@ -791,7 +791,7 @@ public class CMat : IEquatable<CMat>
     /// <returns></returns>
     public Mat CreateMatZeros()
     {
-        return EmguExtensions.InitMat(Size, Channels, Depth);
+        return EmguCvExtensions.InitMat(Size, Channels, Depth);
     }
 
     #endregion

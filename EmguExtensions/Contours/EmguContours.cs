@@ -598,12 +598,12 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
             ? contour1Rect
             : contour2Rect;
 
-        using var contour1Mat = EmguExtensions.InitMat(totalRect.Size);
-        using var contour2Mat = EmguExtensions.InitMat(totalRect.Size);
+        using var contour1Mat = EmguCvExtensions.InitMat(totalRect.Size);
+        using var contour2Mat = EmguCvExtensions.InitMat(totalRect.Size);
 
         var inverseOffset = new Point(-totalRect.X, -totalRect.Y);
-        CvInvoke.DrawContours(contour1Mat, contour1, -1, EmguExtensions.WhiteColor, -1, LineType.EightConnected, null, int.MaxValue, inverseOffset);
-        CvInvoke.DrawContours(contour2Mat, contour2, -1, EmguExtensions.WhiteColor, -1, LineType.EightConnected, null, int.MaxValue, inverseOffset);
+        CvInvoke.DrawContours(contour1Mat, contour1, -1, EmguCvExtensions.WhiteColor, -1, LineType.EightConnected, null, int.MaxValue, inverseOffset);
+        CvInvoke.DrawContours(contour2Mat, contour2, -1, EmguCvExtensions.WhiteColor, -1, LineType.EightConnected, null, int.MaxValue, inverseOffset);
 
         CvInvoke.BitwiseAnd(contour1Mat, contour2Mat, contour1Mat);
 

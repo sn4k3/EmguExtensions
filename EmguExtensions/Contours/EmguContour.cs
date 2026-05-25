@@ -190,14 +190,14 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
     }
 
     /// <summary>
-    /// Gets the centroid of the contour, or <see cref="EmguExtensions.AnchorCenter"/> if the contour has zero area.
+    /// Gets the centroid of the contour, or <see cref="EmguCvExtensions.AnchorCenter"/> if the contour has zero area.
     /// </summary>
     public Point Centroid
     {
         get
         {
             ThrowIfDisposed();
-            return _centroid ??= Moments.M00 == 0 ? EmguExtensions.AnchorCenter :
+            return _centroid ??= Moments.M00 == 0 ? EmguCvExtensions.AnchorCenter :
                 new Point(
                     (int)Math.Round(Moments.M10 / Moments.M00),
                     (int)Math.Round(Moments.M01 / Moments.M00));
@@ -313,12 +313,12 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
     /// Computes the centroid of the specified contour points.
     /// </summary>
     /// <param name="points">The contour points.</param>
-    /// <returns>The centroid point, or <see cref="EmguExtensions.AnchorCenter"/> if the contour is empty or has zero area.</returns>
+    /// <returns>The centroid point, or <see cref="EmguCvExtensions.AnchorCenter"/> if the contour is empty or has zero area.</returns>
     public static Point GetCentroid(VectorOfPoint points)
     {
-        if (points.Length == 0) return EmguExtensions.AnchorCenter;
+        if (points.Length == 0) return EmguCvExtensions.AnchorCenter;
         using var moments = CvInvoke.Moments(points);
-        return moments.M00 == 0 ? EmguExtensions.AnchorCenter :
+        return moments.M00 == 0 ? EmguCvExtensions.AnchorCenter :
             new Point(
                 (int)Math.Round(moments.M10 / moments.M00),
                 (int)Math.Round(moments.M01 / moments.M00));
