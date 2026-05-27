@@ -297,6 +297,13 @@ public static partial class EmguCvExtensions
         public Mat New() => new(src.Size, src.Depth, src.NumberOfChannels);
 
         /// <summary>
+        /// Creates a new <see cref="Mat"/> with same type of the source and specified size
+        /// </summary>
+        /// <param name="size"></param>
+        /// <returns></returns>
+        public Mat New(Size size) => new(size, src.Depth, src.NumberOfChannels);
+
+        /// <summary>
         /// Creates a <see cref="Mat"/> with same size and type of the source and set it to a color
         /// </summary>
         /// <param name="color"></param>
@@ -309,6 +316,13 @@ public static partial class EmguCvExtensions
         /// </summary>
         /// <returns>Blanked <see cref="Mat"/></returns>
         public Mat NewZeros() => InitMat(src.Size, src.NumberOfChannels, src.Depth);
+
+        /// <summary>
+        /// Creates a new blanked (All zeros) <see cref="Mat"/> with same type of the source and specified size
+        /// </summary>
+        /// <param name="size"></param>
+        /// <returns></returns>
+        public Mat NewZeros(Size size) => InitMat(size, src.NumberOfChannels, src.Depth);
         #endregion
 
         #region Copy methods
@@ -421,6 +435,21 @@ public static partial class EmguCvExtensions
         {
             using var srcRoi = src.RoiFromCenter(size);
             srcRoi.CopyToCenter(dst);
+        }
+
+        /// <summary>
+        /// Gets a new mat obtained from it center at a target size and roi
+        /// </summary>
+        /// <param name="targetSize">The size of the target matrix.</param>
+        /// <param name="roi">The region of interest in the source matrix.</param>
+        /// <returns>A new <see cref="Mat"/> containing the specified region from the center of the source matrix.</returns>
+        public Mat NewFromRoiToCenter(Size targetSize, Rectangle roi)
+        {
+            if (targetSize == src.Size) return src.Clone();
+            var newMat = src.NewZeros(targetSize);
+            if (roi.IsEmpty) return newMat;
+            src.CopyRegionToCenter(roi, newMat);
+            return newMat;
         }
 
         /// <summary>
@@ -558,7 +587,7 @@ public static partial class EmguCvExtensions
         /// <returns>A span representing the matrix data.</returns>
         /// <exception cref="NotSupportedException">Thrown if the matrix is not continuous.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
-        public Span<byte> GetSpanOfBytes(int length, int offset)
+        public Span<byte> GetSpanOfBytes(int length = 0, int offset = 0)
         {
             return src.GetSpan<byte>(length, offset);
         }
@@ -893,7 +922,7 @@ public static partial class EmguCvExtensions
         /// <param name="length">The number of elements to fill.</param>
         /// <param name="value">The value to fill the span with.</param>
         /// <param name="valueMinThreshold">The minimum threshold value for filling. If the value is below this threshold, the fill operation is skipped.</param>
-        public void FillSpan<T>(ref int startPosition, int length, T value, T valueMinThreshold) where T : struct, IComparisonOperators<T, T, bool>
+        public void FillSpan<T>(ref int startPosition, int length, T value, T valueMinThreshold = default) where T : struct, IComparisonOperators<T, T, bool>
         {
             if (length <= 0) return;
             if (value < valueMinThreshold) // Ignore threshold (mostly if blacks), spare cycles
@@ -922,7 +951,7 @@ public static partial class EmguCvExtensions
         /// <param name="length">The number of elements to fill.</param>
         /// <param name="value">The value to fill the span with.</param>
         /// <param name="valueMinThreshold">The minimum threshold value for filling. If the value is below this threshold, the fill operation is skipped.</param>
-        public void FillSpan<T>(int x, int y, int length, T value, T valueMinThreshold) where T : struct, IComparisonOperators<T, T, bool>
+        public void FillSpan<T>(int x, int y, int length, T value, T valueMinThreshold = default) where T : struct, IComparisonOperators<T, T, bool>
         {
             if (length <= 0 || value < valueMinThreshold) return; // Ignore threshold (mostly if blacks), spare cycles
             src.GetSpan<T>(length, src.GetPixelPos(x, y)).Fill(value);
@@ -944,7 +973,7 @@ public static partial class EmguCvExtensions
         /// <param name="value">The value to fill the span with.</param>
         /// <param name="valueMinThreshold">The minimum threshold value for filling. If the value is below this threshold, the fill operation is skipped.</param>
 
-        public void FillSpan<T>(Point position, int length, T value, T valueMinThreshold) where T : struct, IComparisonOperators<T, T, bool>
+        public void FillSpan<T>(Point position, int length, T value, T valueMinThreshold = default) where T : struct, IComparisonOperators<T, T, bool>
         {
             src.FillSpan(position.X, position.Y, length, value, valueMinThreshold);
         }
@@ -1953,6 +1982,68 @@ public static partial class EmguCvExtensions
             using var mat = src.CropByBounds();
             dst.Create(mat.Rows, mat.Cols, mat.Depth, mat.NumberOfChannels);
             mat.CopyTo(dst);
+        }
+
+        /// <summary>
+        /// Copies areas smaller than the specified threshold from the source to the destination image.
+        /// </summary>
+        /// <param name="threshold">Maximum area size in pixels. Areas smaller than this value will be copied.</param>
+        /// <param name="dst">Destination image to receive the copied areas.</param>
+        public void CopyAreasSmallerThan(double threshold, Mat dst)
+        {
+            if (threshold <= 1) return;
+            using var contours = src.FindContours(out var hierarchy, RetrType.Tree);
+            var contourGroups = EmguContours.GetContoursInGroups(contours, hierarchy);
+
+            var mask = src.NewZeros();
+            uint drawContours = 0;
+            foreach (var contourGroup in contourGroups)
+            {
+                using var selectedContours = new VectorOfVectorOfPoint();
+                foreach (var group in contourGroup)
+                {
+                    var area = EmguContours.GetContourArea(group);
+                    if (area >= threshold) continue;
+                    drawContours++;
+                    selectedContours.Push(group);
+                }
+
+                if (selectedContours.Size == 0) continue;
+                CvInvoke.DrawContours(mask, selectedContours, -1, WhiteColor, -1);
+
+            }
+            if (drawContours > 0) src.CopyTo(dst, mask);
+        }
+
+        /// <summary>
+        /// Copies areas larger than the specified threshold from the source to the destination image.
+        /// </summary>
+        /// <param name="threshold">Minimum area size in pixels. Areas larger than this value will be copied.</param>
+        /// <param name="dst">Destination image to receive the copied areas.</param>
+        public void CopyAreasLargerThan(double threshold, Mat dst)
+        {
+            if (threshold <= 0) return;
+            using var contours = src.FindContours(out var hierarchy, RetrType.Tree);
+            var contourGroups = EmguContours.GetContoursInGroups(contours, hierarchy);
+
+            var mask = src.NewZeros();
+            uint drawContours = 0;
+            foreach (var contourGroup in contourGroups)
+            {
+                using var selectedContours = new VectorOfVectorOfPoint();
+                foreach (var group in contourGroup)
+                {
+                    var area = EmguContours.GetContourArea(group);
+                    if (area <= threshold) continue;
+                    drawContours++;
+                    selectedContours.Push(group);
+                }
+
+                if (selectedContours.Size == 0) continue;
+                CvInvoke.DrawContours(mask, selectedContours, -1, WhiteColor, -1);
+
+            }
+            if (drawContours > 0) src.CopyTo(dst, mask);
         }
 
         /// <summary>

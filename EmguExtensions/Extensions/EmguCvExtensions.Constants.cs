@@ -22,6 +22,8 @@
 *   SOFTWARE.
 */
 
+using Emgu.CV;
+using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using System.Drawing;
 
@@ -38,7 +40,7 @@ public static partial class EmguCvExtensions
     /// <remarks>This property provides a convenient way to reference the black color in image processing
     /// operations that use the MCvScalar structure. The value corresponds to a color with all channels set to zero
     /// except for the alpha channel, which is set to 255.</remarks>
-    public static MCvScalar BlackColor => new(0, 0, 0, 255);
+    public static MCvScalar BlackColor { get; } = new(0, 0, 0, 255);
 
     /// <summary>
     /// Gets the scalar value representing pure white in the MCvScalar color space.
@@ -46,12 +48,23 @@ public static partial class EmguCvExtensions
     /// <remarks>This property provides a convenient way to access a white color value with all channels set
     /// to their maximum (255). It can be used for drawing, masking, or initializing image regions where a white color
     /// is required.</remarks>
-    public static MCvScalar WhiteColor => new(255, 255, 255, 255);
+    public static MCvScalar WhiteColor { get; } = new(255, 255, 255, 255);
 
     /// <summary>
     /// Gets a Point structure representing the center anchor point, which is commonly used in various image processing
+    /// operations, such as defining the anchor point for structuring elements in morphological operations.
     /// </summary>
-    public static Point AnchorCenter => new(-1, -1);
+    public static Point AnchorCenter { get; } = new(-1, -1);
+
+    /// <summary>
+    /// Gets a structuring element (kernel) of size 3x3 with a rectangular shape, which is commonly used in morphological operations such as dilation and erosion. The anchor point is set to the center of the kernel.
+    /// </summary>
+    private static readonly Lazy<Mat> Kernel3X3RectangleLazy = new(() => CvInvoke.GetStructuringElement(MorphShapes.Rectangle, new Size(3, 3), AnchorCenter));
+
+    /// <summary>
+    /// Gets a structuring element (kernel) of size 3x3 with a rectangular shape, which is commonly used in morphological operations such as dilation and erosion. The anchor point is set to the center of the kernel.
+    /// </summary>
+    public static Mat Kernel3X3Rectangle => Kernel3X3RectangleLazy.Value;
 
     /// <summary>
     /// Gets the scaling factor for normalizing byte pixel values to the range [0, 1]. This constant is commonly used when converting pixel values from byte format (0-255)

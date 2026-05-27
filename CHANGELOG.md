@@ -1,3 +1,12 @@
+# v0.1.3 (27/05/2026)
+- Add/adjust EmguCvExtensions API
+  - Make common color/anchor constants readonly
+  - Add `Kernel3x3Rectangle`
+  - Rename `InitMat(Count)` to `InitMats(Count)`
+  - Add `Mat.New(Size)` and `NewZeros(Size)`, `NewFromRoiToCenter`, and default parameters for `GetSpanOfBytes` and `FillSpan` overloads.
+  - Implement `CopyAreasSmallerThan` and `CopyAreasLargerThan` to copy contour-based regions by area. 
+- Add `MatRoi.Clone` convenience method.
+
 # v0.1.2 (25/05/2026)
 - Add MatCompressor `Id` and `Provider` properties, a `GetCompressorById` helper
 - Add `GetSpanxxxOfBytes` methods to `EmguCvExtensions` to get spans of bytes for image data

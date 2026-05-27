@@ -115,22 +115,24 @@ public static partial class EmguCvExtensions
     /// <summary>
     /// Creates a new <see cref="Mat"/> and zero it
     /// </summary>
-    /// <param name="size"></param>
-    /// <param name="channels"></param>
-    /// <param name="depthType"></param>
+    /// <param name="size">The size of the Mat.</param>
+    /// <param name="channels">The number of channels.</param>
+    /// <param name="depthType">The depth type of the Mat.</param>
     /// <returns></returns>
     public static Mat InitMat(Size size, int channels = 1, DepthType depthType = DepthType.Cv8U)
-        => size.IsEmpty ? new Mat() : Mat.Zeros(size.Height, size.Width, depthType, channels);
+    {
+        return size.IsEmpty ? new Mat() : Mat.Zeros(size.Height, size.Width, depthType, channels);
+    }
 
     /// <summary>
     /// Creates a new <see cref="Mat"/> and set it to a <see cref="MCvScalar"/>
     /// </summary>
-    /// <param name="size"></param>
-    /// <param name="color"></param>
-    /// <param name="channels"></param>
-    /// <param name="depthType"></param>
-    /// <param name="mask"></param>
-    /// <returns></returns>
+    /// <param name="size">The size of the Mat.</param>
+    /// <param name="color">The color to set the Mat to.</param>
+    /// <param name="channels">The number of channels.</param>
+    /// <param name="depthType">The depth type of the Mat.</param>
+    /// <param name="mask">An optional mask to apply when setting the color.</param>
+    /// <returns>The initialized Mat.</returns>
     public static Mat InitMat(Size size, MCvScalar color, int channels = 1, DepthType depthType = DepthType.Cv8U, IInputArray? mask = null)
     {
         if (size.IsEmpty) return new();
@@ -155,7 +157,7 @@ public static partial class EmguCvExtensions
     /// <param name="channels">The number of channels for each Mat.</param>
     /// <param name="depthType">The depth type for each Mat.</param>
     /// <returns>An array of initialized Mats.</returns>
-    public static Mat[] InitMat(int count, Size size, int channels = 1, DepthType depthType = DepthType.Cv8U)
+    public static Mat[] InitMats(int count, Size size, int channels = 1, DepthType depthType = DepthType.Cv8U)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         var mats = new Mat[count];

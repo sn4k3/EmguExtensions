@@ -22,7 +22,6 @@
 *   SOFTWARE.
 */
 
-using System;
 using System.Drawing;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
@@ -246,6 +245,17 @@ public class MatRoi : LeaveOpenDisposableObject
         var boundingRectangle = CvInvoke.BoundingRectangle(mat);
         return new MatRoi(mat, boundingRectangle, leaveOpen);
     }
+
+    #region Clone
+    /// <summary>
+    /// Creates a new MatRoi instance that is a copy of the current instance, including a cloned source matrix and the same region of interest (ROI).
+    /// </summary>
+    /// <returns>A new MatRoi instance that is a copy of the current instance.</returns>
+    public MatRoi Clone()
+    {
+        return new MatRoi(SourceMat.Clone(), Roi, false);
+    }
+    #endregion
 
     /// <inheritdoc />
     protected override void DisposeManaged()
