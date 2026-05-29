@@ -590,7 +590,7 @@ public class CMat : IEquatable<CMat>
             return;
         }
 
-        var srcLength = src.LengthInt32;
+        var srcLength = src.ByteCountInt32;
         if (srcLength <= ThresholdToCompress) // Do not compress if the size is smaller or equal to the threshold
         {
             SetUncompressed(src);

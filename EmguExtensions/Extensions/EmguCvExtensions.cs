@@ -34,6 +34,8 @@ using System.IO.Hashing;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Emgu.CV.XImgproc;
+using StageKit.Primitives;
 using Point = System.Drawing.Point;
 using Size = System.Drawing.Size;
 
@@ -49,15 +51,11 @@ public static partial class EmguCvExtensions
         public byte ByteCount =>
             src switch
             {
-                DepthType.Default => 1,
-                DepthType.Cv8U => 1,
-                DepthType.Cv8S => 1,
-                DepthType.Cv16U => 2,
-                DepthType.Cv16S => 2,
-                DepthType.Cv32S => 4,
-                DepthType.Cv32F => 4,
+                DepthType.Default or DepthType.Cv8U or DepthType.Cv8S => 1,
+                DepthType.Cv16U or DepthType.Cv16S => 2,
+                DepthType.Cv32S or DepthType.Cv32F => 4,
                 DepthType.Cv64F => 8,
-                _ => throw new ArgumentOutOfRangeException()
+                _ => throw new ArgumentOutOfRangeException(nameof(src), src, $"Unsupported depth type: {src}.")
             };
     }
 
@@ -168,6 +166,38 @@ public static partial class EmguCvExtensions
         }
 
         /// <summary>
+        /// Encodes the source image as a PNG asynchronously, offloading the work to a background thread.
+        /// </summary>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task whose result is a byte array containing the PNG-encoded image data.</returns>
+        public Task<byte[]> GetPngBytesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.Run(src.GetPngBytes, cancellationToken);
+        }
+
+        /// <summary>
+        /// Encodes the source image as a PNG asynchronously, offloading the work to a background thread.
+        /// </summary>
+        /// <param name="pngCompressionLevel">The compression level to use for PNG encoding. Valid values range from 0 (no compression) to 9 (maximum compression).</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task whose result is a byte array containing the PNG-encoded image data.</returns>
+        public Task<byte[]> GetPngBytesAsync(int pngCompressionLevel, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => src.GetPngBytes(pngCompressionLevel), cancellationToken);
+        }
+
+        /// <summary>
+        /// Encodes the source image as a PNG asynchronously, offloading the work to a background thread.
+        /// </summary>
+        /// <param name="compressionLevel">The compression level to use for PNG encoding.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task whose result is a byte array containing the PNG-encoded image data.</returns>
+        public Task<byte[]> GetPngBytesAsync(CompressionLevel compressionLevel, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => src.GetPngBytes(compressionLevel), cancellationToken);
+        }
+
+        /// <summary>
         ///Draws the specified text string on the image at the given location, using the specified font, scale, color,
         /// and formatting options.
         /// </summary>
@@ -200,8 +230,6 @@ public static partial class EmguCvExtensions
 
             switch (lines.Length)
             {
-                case 0:
-                    return;
                 case 1:
                     CvInvoke.PutText(src, text, org, fontFace, fontScale, color, thickness, lineType, bottomLeftOrigin);
                     return;
@@ -267,12 +295,24 @@ public static partial class EmguCvExtensions
         public int RealStep => src.GetByteCount(src.Width);
 
         /// <summary>
+        /// Gets the total number of pixels in the matrix, calculated as width multiplied by height.
+        /// </summary>
+        public int PixelCount
+        {
+            get
+            {
+                var size = src.Size;
+                return size.Width * size.Height;
+            }
+        }
+
+        /// <summary>
         /// Gets the total length of the matrix data in bytes, represented as a 32-bit integer.
         /// </summary>
         /// <remarks>This property is intended for use with matrices whose total data size does not exceed
         /// the maximum value of a 32-bit integer. For larger matrices, use a property that returns a 64-bit length to
         /// avoid overflow.</remarks>
-        public int LengthInt32 => src.GetByteCount(src.Total.ToInt32());
+        public int ByteCountInt32 => src.GetByteCount(src.Total.ToInt32());
 
         /// <summary>
         /// Gets the total length of the matrix data, in bytes, as a 64-bit integer.
@@ -280,7 +320,7 @@ public static partial class EmguCvExtensions
         /// <remarks>Use this property when working with large matrices that may exceed the range of a
         /// 32-bit integer. The value represents the total number of bytes required to store all elements of the matrix,
         /// including all channels.</remarks>
-        public long LengthInt64 => src.GetByteCount(src.Total.ToInt64());
+        public long ByteCountInt64 => src.GetByteCount(src.Total.ToInt64());
 
         /// <summary>
         /// Calculates the center point of the matrix based on its width and height. The center point is determined by dividing the width and height by 2, resulting in a Point that represents the coordinates of the center pixel of the matrix.
@@ -338,12 +378,12 @@ public static partial class EmguCvExtensions
         public void CopyTo(IntPtr destination)
         {
             if (destination == IntPtr.Zero)
-                throw new ArgumentNullException(nameof(destination));
+                throw new ArgumentException("Destination pointer must not be null.", nameof(destination));
             unsafe
             {
                 if (src.IsContinuous)
                 {
-                    var totalBytes = src.LengthInt64;
+                    var totalBytes = src.ByteCountInt64;
                     Buffer.MemoryCopy(src.DataPointer.ToPointer(), destination.ToPointer(), totalBytes, totalBytes);
                 }
                 else
@@ -383,6 +423,32 @@ public static partial class EmguCvExtensions
                     stream.Write(span2D.GetRowSpan(row));
                 }
             }
+        }
+
+        /// <summary>
+        /// Asynchronously copies the contents of the matrix to the specified stream.
+        /// </summary>
+        /// <remarks>For continuous matrices this performs a zero-copy async write directly from the
+        /// underlying unmanaged memory. Non-continuous matrices are materialized into a single buffer (synchronously,
+        /// on the calling thread) before writing. The caller must not mutate or dispose the source matrix while the
+        /// returned task is in flight; <see cref="Mat"/> is not thread-safe.</remarks>
+        /// <param name="stream">The destination stream.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task that represents the asynchronous copy operation.</returns>
+        public async Task CopyToAsync(Stream stream, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+
+            if (src.IsContinuous)
+            {
+                await using var source = src.GetUnmanagedMemoryStream(FileAccess.Read);
+                await source.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            // Non-continuous Mat: materialize the rows into a single contiguous buffer, then write
+            var bytes = src.ToArray();
+            await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -520,7 +586,7 @@ public static partial class EmguCvExtensions
             if (!src.IsContinuous)
                 throw new NotSupportedException("UnmanagedMemoryStream requires a continuous Mat.");
 
-            var length = src.LengthInt32;
+            var length = src.ByteCountInt32;
             unsafe
             {
                 return new UnmanagedMemoryStream(src.BytePointer, length, length, accessMode);
@@ -553,7 +619,7 @@ public static partial class EmguCvExtensions
 
             var sizeOfT = Unsafe.SizeOf<T>();
             offset *= sizeOfT;
-            var maxLength = (src.LengthInt32 - offset) / sizeOfT;
+            var maxLength = (src.ByteCountInt32 - offset) / sizeOfT;
 
             if (maxLength < 0)
                 throw new ArgumentOutOfRangeException(nameof(offset), offset, "Offset value overflow this Mat size.");
@@ -618,7 +684,7 @@ public static partial class EmguCvExtensions
 
             var sizeOfT = Unsafe.SizeOf<T>();
             offset *= sizeOfT;
-            var maxLength = (src.LengthInt32 - offset) / sizeOfT;
+            var maxLength = (src.ByteCountInt32 - offset) / sizeOfT;
 
             if (maxLength < 0)
                 throw new ArgumentOutOfRangeException(nameof(offset), offset, "Offset value overflow this Mat size.");
@@ -922,6 +988,7 @@ public static partial class EmguCvExtensions
         /// <param name="length">The number of elements to fill.</param>
         /// <param name="value">The value to fill the span with.</param>
         /// <param name="valueMinThreshold">The minimum threshold value for filling. If the value is below this threshold, the fill operation is skipped.</param>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public void FillSpan<T>(ref int startPosition, int length, T value, T valueMinThreshold = default) where T : struct, IComparisonOperators<T, T, bool>
         {
             if (length <= 0) return;
@@ -951,6 +1018,7 @@ public static partial class EmguCvExtensions
         /// <param name="length">The number of elements to fill.</param>
         /// <param name="value">The value to fill the span with.</param>
         /// <param name="valueMinThreshold">The minimum threshold value for filling. If the value is below this threshold, the fill operation is skipped.</param>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public void FillSpan<T>(int x, int y, int length, T value, T valueMinThreshold = default) where T : struct, IComparisonOperators<T, T, bool>
         {
             if (length <= 0 || value < valueMinThreshold) return; // Ignore threshold (mostly if blacks), spare cycles
@@ -972,7 +1040,7 @@ public static partial class EmguCvExtensions
         /// <param name="length">The number of elements to fill.</param>
         /// <param name="value">The value to fill the span with.</param>
         /// <param name="valueMinThreshold">The minimum threshold value for filling. If the value is below this threshold, the fill operation is skipped.</param>
-
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public void FillSpan<T>(Point position, int length, T value, T valueMinThreshold = default) where T : struct, IComparisonOperators<T, T, bool>
         {
             src.FillSpan(position.X, position.Y, length, value, valueMinThreshold);
@@ -1277,10 +1345,10 @@ public static partial class EmguCvExtensions
         }
 
         /// <summary>
-        /// Sets a byte pixel at a position
+        /// Writes a sequence of bytes into the matrix data, starting at the specified byte offset.
         /// </summary>
-        /// <param name="pixel"></param>
-        /// <param name="value"></param>
+        /// <param name="pixel">The byte offset (not pixel index) from the start of the matrix data at which to begin writing.</param>
+        /// <param name="value">The bytes to write. <paramref name="value"/>.Length bytes are copied starting at <paramref name="pixel"/>.</param>
         public void SetByte(int pixel, byte[] value)
         {
             ArgumentNullException.ThrowIfNull(value);
@@ -1318,7 +1386,7 @@ public static partial class EmguCvExtensions
         /// <returns>A byte array containing the raw data.</returns>
         public byte[] ToArray()
         {
-            var length = src.LengthInt32;
+            var length = src.ByteCountInt32;
             if (length == 0) return [];
             var copy = GC.AllocateUninitializedArray<byte>(length);
             src.CopyTo(copy);
@@ -1334,6 +1402,7 @@ public static partial class EmguCvExtensions
         /// <param name="startPos">Start pixel position</param>
         /// <param name="length">Pixel span length</param>
         /// <returns>Pixel position in the span, or -1 if not found</returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstNegativePixel<T>(int startPos = 0, int length = 0) where T : struct, INumber<T>, IMinMaxValue<T>
         {
             return src.FindFirstPixelEqualTo(T.Zero, startPos, length);
@@ -1345,6 +1414,7 @@ public static partial class EmguCvExtensions
         /// <param name="startPos">Start pixel position</param>
         /// <param name="length">Pixel span length</param>
         /// <returns>Pixel position in the span, or -1 if not found</returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPositivePixel<T>(int startPos = 0, int length = 0) where T : struct, INumber<T>, IMinMaxValue<T>
         {
             return src.FindFirstPixelGreaterThan(T.Zero, startPos, length);
@@ -1357,6 +1427,7 @@ public static partial class EmguCvExtensions
         /// <param name="startPos">Start pixel position</param>
         /// <param name="length">Pixel span length</param>
         /// <returns>Pixel position in the span, or -1 if not found</returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelEqualTo<T>(T value, int startPos = 0, int length = 0) where T : struct
         {
             var span = src.GetReadOnlySpan<T>(length, startPos);
@@ -1371,6 +1442,7 @@ public static partial class EmguCvExtensions
         /// <param name="startPos">Start pixel position</param>
         /// <param name="length">Pixel span length</param>
         /// <returns>Pixel position in the span, or -1 if not found</returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelLessThan<T>(T value, int startPos = 0, int length = 0) where T : struct, INumber<T>, IMinMaxValue<T>
         {
             if (value == T.MinValue) return -1;
@@ -1386,6 +1458,7 @@ public static partial class EmguCvExtensions
         /// <param name="startPos">Start pixel position</param>
         /// <param name="length">Pixel span length</param>
         /// <returns>Pixel position in the span, or -1 if not found</returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelEqualOrLessThan<T>(T value, int startPos = 0, int length = 0) where T : struct, INumber<T>, IMinMaxValue<T>
         {
             var span = src.GetReadOnlySpan<T>(length, startPos);
@@ -1400,6 +1473,7 @@ public static partial class EmguCvExtensions
         /// <param name="startPos">Start pixel position</param>
         /// <param name="length">Pixel span length</param>
         /// <returns>Pixel position in the span, or -1 if not found</returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelGreaterThan<T>(T value, int startPos = 0, int length = 0) where T : struct, INumber<T>, IMinMaxValue<T>
         {
             if (value == T.MaxValue) return -1;
@@ -1415,6 +1489,7 @@ public static partial class EmguCvExtensions
         /// <param name="startPos">Start pixel position</param>
         /// <param name="length">Pixel span length</param>
         /// <returns>Pixel position in the span, or -1 if not found</returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelEqualOrGreaterThan<T>(T value, int startPos = 0, int length = 0) where T : struct, INumber<T>, IMinMaxValue<T>
         {
             var span = src.GetReadOnlySpan<T>(length, startPos);
@@ -1432,6 +1507,7 @@ public static partial class EmguCvExtensions
         /// <param name="thresholdGrey">Value to threshold the grey, below or equal to this value will set to 0, otherwise <paramref name="thresholdMaxGrey"/></param>
         /// <param name="thresholdMaxGrey">Grey value to set when the threshold is above the limit.</param>
         /// <returns></returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public GreyStride[] ScanStrides(int strideLimit = 0, bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false, byte thresholdGrey = 0, byte thresholdMaxGrey = byte.MaxValue)
         {
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
@@ -1561,6 +1637,7 @@ public static partial class EmguCvExtensions
         /// <param name="startOnFirstPositivePixel">True to skip the first sequence of black pixels, otherwise false.</param>
         /// <param name="excludeBlacks">True to exclude black strides from returning, otherwise false.</param>
         /// <returns></returns>
+        /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public GreyStride[] ScanStrides(Func<byte, byte> greyFunc, int strideLimit = 0, bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false)
         {
             ArgumentNullException.ThrowIfNull(greyFunc);
@@ -1884,6 +1961,65 @@ public static partial class EmguCvExtensions
 
                 return lines.WrittenSpan.ToArray();
         }
+
+        /// <summary>
+        /// Scans sequential strides of continuous pixels asynchronously, offloading the work to a background thread.
+        /// </summary>
+        /// <param name="strideLimit">Size limit of a single stride.</param>
+        /// <param name="breakOnRows">True to break the stride sequence on a new row, otherwise false.</param>
+        /// <param name="startOnFirstPositivePixel">True to skip the first sequence of black pixels, otherwise false.</param>
+        /// <param name="excludeBlacks">True to exclude black strides from returning, otherwise false.</param>
+        /// <param name="thresholdGrey">Value to threshold the grey, below or equal to this value will set to 0, otherwise <paramref name="thresholdMaxGrey"/></param>
+        /// <param name="thresholdMaxGrey">Grey value to set when the threshold is above the limit.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task whose result is the array of scanned strides.</returns>
+        public Task<GreyStride[]> ScanStridesAsync(int strideLimit = 0, bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false, byte thresholdGrey = 0, byte thresholdMaxGrey = byte.MaxValue, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => src.ScanStrides(strideLimit, breakOnRows, startOnFirstPositivePixel, excludeBlacks, thresholdGrey, thresholdMaxGrey), cancellationToken);
+        }
+
+        /// <summary>
+        /// Scans sequential strides of continuous pixels asynchronously, offloading the work to a background thread.
+        /// </summary>
+        /// <param name="greyFunc">Function to filter and process the gray value.</param>
+        /// <param name="strideLimit">Size limit of a single stride.</param>
+        /// <param name="breakOnRows">True to break the stride sequence on a new row, otherwise false.</param>
+        /// <param name="startOnFirstPositivePixel">True to skip the first sequence of black pixels, otherwise false.</param>
+        /// <param name="excludeBlacks">True to exclude black strides from returning, otherwise false.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task whose result is the array of scanned strides.</returns>
+        public Task<GreyStride[]> ScanStridesAsync(Func<byte, byte> greyFunc, int strideLimit = 0, bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(greyFunc);
+            return Task.Run(() => src.ScanStrides(greyFunc, strideLimit, breakOnRows, startOnFirstPositivePixel, excludeBlacks), cancellationToken);
+        }
+
+        /// <summary>
+        /// Scans sequential lines in X or Y direction asynchronously, offloading the work to a background thread.
+        /// </summary>
+        /// <param name="vertically">True to scan vertically, otherwise horizontally</param>
+        /// <param name="thresholdGrey">Value to threshold the grey, less or equal to this value will set to 0, otherwise 255</param>
+        /// <param name="offset">Value to offset the coordinates with.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task whose result is the array of scanned lines.</returns>
+        public Task<GreyLine[]> ScanLinesAsync(bool vertically = false, byte thresholdGrey = 0, Point offset = default, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => src.ScanLines(vertically, thresholdGrey, offset), cancellationToken);
+        }
+
+        /// <summary>
+        /// Scans sequential lines in X or Y direction asynchronously, offloading the work to a background thread.
+        /// </summary>
+        /// <param name="greyFunc">Function to filter and process the gray value</param>
+        /// <param name="vertically">True to scan vertically, otherwise horizontally</param>
+        /// <param name="offset">Value to offset the coordinates with.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task whose result is the array of scanned lines.</returns>
+        public Task<GreyLine[]> ScanLinesAsync(Func<byte, byte> greyFunc, bool vertically = false, Point offset = default, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(greyFunc);
+            return Task.Run(() => src.ScanLines(greyFunc, vertically, offset), cancellationToken);
+        }
         #endregion
 
         #region Create methods
@@ -1921,7 +2057,7 @@ public static partial class EmguCvExtensions
         public Mat CropByBounds(bool cloneInsteadRoi = false)
         {
             var rect = CvInvoke.BoundingRectangle(src);
-            if (rect.Size == Size.Empty) return src.New();
+            if (rect.Size == Size.Empty) return new Mat();
             if (src.Size == rect.Size) return cloneInsteadRoi ? src.Clone() : src.Roi(src.Size);
             var roi = src.Roi(rect);
 
@@ -1961,7 +2097,7 @@ public static partial class EmguCvExtensions
             }
 
             var rect = CvInvoke.BoundingRectangle(src);
-            if (rect.Size == Size.Empty) return src.New();
+            if (rect.Size == Size.Empty) return new Mat();
             using var roi = src.Size == rect.Size ? src.Roi(src.Size) : src.Roi(rect);
 
             var numberOfChannels = roi.NumberOfChannels;
@@ -2104,6 +2240,7 @@ public static partial class EmguCvExtensions
                     {
                         // Cache the inner contour to avoid repeated native interop indexer calls
                         var contour = contours[i];
+                        if (contour.Size == 0) continue;
 
                         if (hierarchy[i, EmguContour.HierarchyParent] == -1) // Top hierarchy
                         {
@@ -2154,6 +2291,18 @@ public static partial class EmguCvExtensions
             {
                 if (!ReferenceEquals(src, mat)) mat.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Generates SVG path strings from the contours found in the matrix asynchronously, offloading the work to a background thread.
+        /// </summary>
+        /// <param name="compression">The contour approximation method.</param>
+        /// <param name="threshold">If <see langword="true"/>, applies a binary threshold before extracting contours.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task whose result is a list of SVG path data strings.</returns>
+        public Task<List<string>> GetSvgPathAsync(ChainApproxMethod compression = ChainApproxMethod.ChainApproxSimple, bool threshold = true, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => src.GetSvgPath(compression, threshold), cancellationToken);
         }
         #endregion
 
@@ -2254,7 +2403,6 @@ public static partial class EmguCvExtensions
         /// <param name="interpolation"></param>
         public void Transform(double xScale, double yScale, double xTrans = 0, double yTrans = 0, Size dstSize = default, Inter interpolation = Inter.Linear)
         {
-            //var dst = new Mat(src.Size, src.Depth, src.NumberOfChannels);
             using var translateTransform = new Matrix<double>(2, 3);
             translateTransform[0, 0] = xScale; // xScale
             translateTransform[1, 1] = yScale; // yScale
@@ -2748,25 +2896,38 @@ public static partial class EmguCvExtensions
         /// Calculates the 64-bit xxHash3 hash value of the underlying data source.
         /// </summary>
         /// <remarks>The xxHash3 algorithm provides fast, non-cryptographic hashing suitable for checksums
-        /// and hash-based data structures. The result is deterministic for the same input data.</remarks>
+        /// and hash-based data structures. The result is deterministic for the same input data. Non-continuous
+        /// matrices (e.g. a partial-width ROI) are hashed row by row, excluding any per-row padding.</remarks>
         /// <returns>A 64-bit unsigned integer representing the xxHash3 hash of the data.</returns>
         public ulong GetXxHash3()
         {
-            return XxHash3.HashToUInt64(src.GetSpan<byte>());
+            if (src.IsContinuous)
+                return XxHash3.HashToUInt64(src.GetReadOnlySpanOfBytes());
+
+            // Non-continuous (ROI): hash row by row to skip per-row padding
+            var hash = new XxHash3();
+            var span2D = src.GetReadOnlySpan2DOfBytes();
+            for (var row = 0; row < span2D.Height; row++)
+            {
+                hash.Append(span2D.GetRowSpan(row));
+            }
+            return hash.GetCurrentHashAsUInt64();
         }
 
         /// <summary>
         /// Performs morphological skeletonization on the source image, reducing it to a single-pixel-wide representation
         /// of its shape while preserving the topological structure.
         /// </summary>
-        /// <param name="iterations">When this method returns, contains the number of iterations performed to complete the skeletonization.</param>
-        /// <param name="ksize">The size of the structuring element. Defaults to 3x3 if empty.</param>
-        /// <param name="elementShape">The shape of the morphological structuring element.</param>
-        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <param name="thinningType">The type of thinning algorithm to use for skeletonization.</param>
         /// <returns>A new matrix containing the skeletonized image.</returns>
-        public Mat Skeletonize(out int iterations, Size ksize = default, MorphShapes elementShape = MorphShapes.Rectangle, CancellationToken cancellationToken = default)
+        public Mat Skeletonize(ThinningTypes thinningType = ThinningTypes.ZhangSuen)
         {
-            if (ksize.IsEmpty) ksize = new Size(3, 3);
+            var dst = new Mat();
+            XImgprocInvoke.Thinning(src, dst, thinningType);
+            return dst;
+
+            // Old implementation using basic morphological operations, kept for reference but not used due to performance reasons. The Zhang-Suen algorithm is much faster and produces the same result.
+            /*if (ksize.IsEmpty) ksize = new Size(3, 3);
             var skeleton = src.NewZeros();
             using var kernel = CvInvoke.GetStructuringElement(elementShape, ksize, AnchorCenter);
             using var current = src.Clone();
@@ -2797,18 +2958,20 @@ public static partial class EmguCvExtensions
                 eroded.CopyTo(current);
             }
 
-            return skeleton;
+            return skeleton;*/
         }
 
+
         /// <summary>
-        /// Performs morphological skeletonization on the source image, reducing it to a single-pixel-wide representation
+        /// Performs morphological skeletonization asynchronously, offloading the iterative work to a background thread.
         /// </summary>
-        /// <param name="ksize">The size of the structuring element. Defaults to 3x3 if empty.</param>
-        /// <param name="elementShape">The shape of the morphological structuring element.</param>
+        /// <param name="thinningType">The type of thinning algorithm to use for skeletonization.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
-        /// <returns>A new matrix containing the skeletonized image.</returns>
-        public Mat Skeletonize(Size ksize = default, MorphShapes elementShape = MorphShapes.Rectangle, CancellationToken cancellationToken = default)
-            => src.Skeletonize(out _, ksize, elementShape, cancellationToken);
+        /// <returns>A task whose result is a new matrix containing the skeletonized image.</returns>
+        public Task<Mat> SkeletonizeAsync(ThinningTypes thinningType = ThinningTypes.ZhangSuen, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => src.Skeletonize(thinningType), cancellationToken);
+        }
 
         /// <summary>
         /// Gets the minimum and maximum pixel values and their locations in the matrix.
@@ -2849,6 +3012,23 @@ public static partial class EmguCvExtensions
             var dst = new Mat();
             CvInvoke.ExtractChannel(src, dst, index);
             return dst;
+        }
+
+        /// <summary>
+        /// Gets a <see cref="BitmapInfo"/> struct containing detailed information about the <see cref="Mat"/>.
+        /// </summary>
+        /// <returns>A <see cref="BitmapInfo"/> struct with information about the <see cref="Mat"/>.</returns>
+        public BitmapInfo GetBitmapInfo()
+        {
+            return new BitmapInfo
+            {
+                Address = src.DataPointer,
+                Width = src.Width,
+                Height = src.Height,
+                RowBytes = src.RealStep,
+                BytesPerPixel = src.ElementSize,
+                IsContiguous = src.IsContinuous,
+            };
         }
         #endregion
     }

@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/github/license/sn4k3/EmguExtensions?style=for-the-badge)](https://github.com/sn4k3/EmguExtensions/blob/master/LICENSE)
 [![GitHub repo size](https://img.shields.io/github/repo-size/sn4k3/EmguExtensions?style=for-the-badge)](#)
 [![Code size](https://img.shields.io/github/languages/code-size/sn4k3/EmguExtensions?style=for-the-badge)](#)
-[![Nuget](https://img.shields.io/nuget/v/EmguExtensions?style=for-the-badge)](https://www.nuget.org/packages/EmguExtensions)
+[![NuGet](https://img.shields.io/nuget/v/EmguExtensions?style=for-the-badge)](https://www.nuget.org/packages/EmguExtensions)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/sn4k3?color=red&style=for-the-badge)](https://github.com/sponsors/sn4k3)
 
 A high-performance .NET library that extends [Emgu.CV](https://www.emgu.com) (OpenCV wrapper) with span-based `Mat` accessors, ROI utilities, pluggable Mat compression, structured contour hierarchies, and drawing helpers.

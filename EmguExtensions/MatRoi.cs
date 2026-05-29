@@ -25,6 +25,7 @@
 using System.Drawing;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
+using StageKit.Primitives;
 
 namespace EmguExtensions;
 

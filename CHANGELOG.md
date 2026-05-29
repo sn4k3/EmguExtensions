@@ -1,3 +1,13 @@
+# v0.1.4 (29/05/2026)
+- Add StageKit.Primitives dependency and related using imports
+- Add a new EmguExtensions.Avalonia project (bitmap helpers and Mat→WriteableBitmap converters) and a BitmapInfo record for describing locked framebuffer state.
+- Introduce many EmguCvExtensions improvements: 
+  - PixelCount
+  - Renamed LengthInt32/LengthInt64 → ByteCountInt32/ByteCountInt64
+  - Async helpers (GetPngBytesAsync, CopyToAsync, ToBitmapAsync)
+  - Additional span/stream helpers
+  - Small API/exception message refinements.
+
 # v0.1.3 (27/05/2026)
 - Add/adjust EmguCvExtensions API
   - Make common color/anchor constants readonly

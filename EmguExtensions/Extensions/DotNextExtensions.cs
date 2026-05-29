@@ -30,19 +30,22 @@ namespace EmguExtensions;
 /// </summary>
 public static class DotNextExtensions
 {
-    /// <summary>
-    /// Copies the contents of the <see cref="SparseBufferWriter{T}"/> to a new array and returns it.
-    /// </summary>
     /// <param name="buffer">The buffer to copy from.</param>
     /// <typeparam name="T">The type of elements in the buffer.</typeparam>
-    /// <returns>A new array containing the copied elements.</returns>
-    public static T[] ToArray<T>(this SparseBufferWriter<T> buffer) where T : struct
+    extension<T>(SparseBufferWriter<T> buffer) where T : struct
     {
-        var writtenCount = checked((int)buffer.WrittenCount);
-        if (writtenCount == 0) return [];
+        /// <summary>
+        /// Copies the contents of the <see cref="SparseBufferWriter{T}"/> to a new array and returns it.
+        /// </summary>
+        /// <returns>A new array containing the copied elements.</returns>
+        public T[] ToArray()
+        {
+            var writtenCount = checked((int)buffer.WrittenCount);
+            if (writtenCount == 0) return [];
 
-        var output = GC.AllocateUninitializedArray<T>(writtenCount);
-        buffer.CopyTo(output);
-        return output;
+            var output = GC.AllocateUninitializedArray<T>(writtenCount);
+            buffer.CopyTo(output);
+            return output;
+        }
     }
 }

@@ -8,6 +8,7 @@
     <File Path="LICENSE" />
     <File Path="README.md" />
   </Folder>
+  <Project Path="EmguExtensions.Avalonia/EmguExtensions.Avalonia.csproj" Id="90ef4534-25f7-4f95-a1aa-92985c3b22c7" />
   <Project Path="EmguExtensions.Benchmarks/EmguExtensions.Benchmarks.csproj" />
   <Project Path="EmguExtensions.Tests/EmguExtensions.Tests.csproj" Id="5c3b5281-1459-4074-ac20-d41a93042208" />
   <Project Path="EmguExtensions/EmguExtensions.csproj" />

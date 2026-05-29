@@ -521,7 +521,7 @@ public class UnitTestEmguExtensions
 
     #endregion
 
-    #region Properties (RealStep, LengthInt32, LengthInt64, CenterPoint)
+    #region Properties (RealStep, ByteCountInt32, ByteCountInt64, CenterPoint)
 
     [Fact]
     public void RealStep_SingleChannelMat_EqualsWidth()
@@ -534,14 +534,14 @@ public class UnitTestEmguExtensions
     public void LengthInt32_SingleChannelMat_EqualsWidthTimesHeight()
     {
         using var mat = CreateSolidMat(100, 80);
-        Assert.Equal(8000, mat.LengthInt32);
+        Assert.Equal(8000, mat.ByteCountInt32);
     }
 
     [Fact]
     public void LengthInt64_SingleChannelMat_EqualsWidthTimesHeight()
     {
         using var mat = CreateSolidMat(100, 80);
-        Assert.Equal(8000L, mat.LengthInt64);
+        Assert.Equal(8000L, mat.ByteCountInt64);
     }
 
     [Fact]

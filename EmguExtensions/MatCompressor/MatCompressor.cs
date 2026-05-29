@@ -130,7 +130,7 @@ public abstract class MatCompressor
     /// <returns>The optimal buffer chunk size in bytes.</returns>
     protected virtual int GetOptimalBufferChunkSize(Mat mat)
     {
-        return Math.Min(DefaultBufferChunkSize, mat.LengthInt32);
+        return Math.Min(DefaultBufferChunkSize, mat.ByteCountInt32);
     }
 
     /// <summary>
