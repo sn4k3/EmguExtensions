@@ -9,7 +9,8 @@
         <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
 
         <!-- Metadata -->
-        <ProductName>EmguExtensions</ProductName>
+        <MainProductName>EmguExtensions</MainProductName>
+        <ProductName>$(MainProductName)</ProductName>
         <Company>PTRTECH</Company>
         <CompanyRDNS>pt.ptrtech</CompanyRDNS>
         <Authors>Tiago Conceição</Authors>
@@ -18,8 +19,8 @@
         <Version>0.1.4</Version>
 
         <!-- Package -->
-        <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(ProductName).ico</ApplicationIcon>
-        <PackageIcon>$(ProductName)-128.png</PackageIcon>
+        <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(MainProductName).ico</ApplicationIcon>
+        <PackageIcon>$(MainProductName)-128.png</PackageIcon>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
@@ -44,7 +45,7 @@
 
         <!-- Sign -->
         <SignAssembly>True</SignAssembly>
-        <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)$(ProductName).snk</AssemblyOriginatorKeyFile>
+        <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)$(MainProductName).snk</AssemblyOriginatorKeyFile>
 
         <!-- No pack under Debug -->
         <IsPackable Condition="'$(Configuration)' == 'Debug'">false</IsPackable>
@@ -55,7 +56,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <None Include="$(MSBuildThisFileDirectory)media\$(ProductName)-128.png" Pack="true" PackagePath="" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)media\$(MainProductName)-128.png" Pack="true" PackagePath="" Visible="false"/>
     </ItemGroup>
 
     <Choose>
