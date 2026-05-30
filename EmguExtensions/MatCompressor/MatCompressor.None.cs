@@ -23,7 +23,6 @@
 */
 
 using Emgu.CV;
-using System.IO.Compression;
 
 namespace EmguExtensions;
 
@@ -39,10 +38,13 @@ public sealed class MatCompressorNone : MatCompressor
     private MatCompressorNone() { }
 
     /// <inheritdoc />
+    public override int MaximumCompressionLevel => 0;
+
+    /// <inheritdoc />
     public override string Name => "None";
 
     /// <inheritdoc />
-    protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
+    protected override byte[] CompressCore(Mat src, int compressionLevel)
     {
         return src.ToArray();
     }

@@ -22,9 +22,9 @@
 *   SOFTWARE.
 */
 
+using System.IO.Compression;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
-using System.IO.Compression;
 
 namespace EmguExtensions;
 
@@ -37,20 +37,32 @@ public sealed class MatCompressorPng : MatCompressor
     public static readonly MatCompressorPng Instance = new();
 
     /// <inheritdoc />
-    public override string Name => "PNG";
-
-    /// <inheritdoc />
     private MatCompressorPng() { }
 
     /// <inheritdoc />
-    public override byte[] Compress(Mat src, int compressionLevel)
+    public override string Provider => "OpenCV";
+
+    /// <inheritdoc />
+    public override string Name => "PNG";
+
+    /// <inheritdoc />
+    public override int MaximumCompressionLevel => 9;
+
+    /// <inheritdoc />
+    protected override int GetCompressionLevel(CompressionLevel compressionLevel)
     {
-        if (src.IsEmpty) return [];
-        return src.GetPngBytes(compressionLevel);
+        return compressionLevel switch
+        {
+            CompressionLevel.NoCompression => 0,
+            CompressionLevel.Fastest => 1,
+            CompressionLevel.Optimal => 3,
+            CompressionLevel.SmallestSize => 9,
+            _ => throw new ArgumentOutOfRangeException(nameof(compressionLevel), compressionLevel, null)
+        };
     }
 
     /// <inheritdoc />
-    protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
+    protected override byte[] CompressCore(Mat src, int compressionLevel)
     {
         return src.GetPngBytes(compressionLevel);
     }

@@ -30,6 +30,14 @@ namespace EmguExtensions;
 /// <inheritdoc />
 public sealed class MatCompressorBrotli : MatCompressor
 {
+    // Constants fetched from System.IO.Compression.BrotliUtils.
+    private const int WindowBitsMin = 10;
+    private const int WindowBitsDefault = 22;
+    private const int WindowBitsMax = 24;
+    private const int QualityMin = 0;
+    private const int QualityDefault = 4;
+    private const int QualityMax = 11;
+
     /// <summary>
     /// Provides a singleton instance of the <see cref="MatCompressorBrotli"/> class for efficient reuse across the application.
     /// </summary>
@@ -39,13 +47,33 @@ public sealed class MatCompressorBrotli : MatCompressor
     public override string Name => "Brotli";
 
     /// <inheritdoc />
+    public override int MaximumCompressionLevel => QualityMax;
+
+    /// <inheritdoc />
     private MatCompressorBrotli() { }
 
     /// <inheritdoc />
-    protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
+    protected override int GetCompressionLevel(CompressionLevel compressionLevel)
     {
+        return compressionLevel switch
+        {
+            CompressionLevel.NoCompression => QualityMin,
+            CompressionLevel.Fastest => 1,
+            CompressionLevel.Optimal => QualityDefault,
+            CompressionLevel.SmallestSize => QualityMax,
+            _ => throw new ArgumentException("Invalid CompressionLevel value.", nameof(compressionLevel))
+        };
+    }
+
+    /// <inheritdoc />
+    protected override byte[] CompressCore(Mat src, int compressionLevel)
+    {
+        var options = new BrotliCompressionOptions
+        {
+            Quality = compressionLevel
+        };
         using var buffer = CreateCompressionBuffer(src);
-        using (var brotliStream = new BrotliStream(CreateCompressionStream(buffer), compressionLevel))
+        using (var brotliStream = new BrotliStream(CreateCompressionStream(buffer), options))
         {
             src.CopyTo(brotliStream);
         }
@@ -56,9 +84,15 @@ public sealed class MatCompressorBrotli : MatCompressor
     /// <inheritdoc />
     protected override void DecompressCore(byte[] compressedBytes, Mat dst)
     {
-        if (!BrotliDecoder.TryDecompress(compressedBytes, dst.GetSpan<byte>(), out _))
+        var dstSpan = dst.GetSpan<byte>();
+        if (!BrotliDecoder.TryDecompress(compressedBytes, dstSpan, out var bytesWritten))
         {
             throw new InvalidDataException("Failed to decompress Brotli data.");
+        }
+
+        if (bytesWritten != dstSpan.Length)
+        {
+            throw new InvalidDataException("Brotli decompressed size does not match destination Mat size.");
         }
     }
 }

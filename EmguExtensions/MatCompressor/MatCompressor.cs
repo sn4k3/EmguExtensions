@@ -36,8 +36,9 @@ namespace EmguExtensions;
 /// <remarks>Inherit from this class to create custom compressors for Mat data. Implementations must provide logic
 /// for compressing and decompressing matrices, as well as a unique compressor name. This class also provides
 /// asynchronous methods for compression and decompression, which offload work to background threads.</remarks>
-public abstract class MatCompressor
+public abstract class MatCompressor: IEquatable<MatCompressor>
 {
+    #region Static Properties
     /// <summary>
     /// Gets a collection of available material compressors supported by the system.
     /// </summary>
@@ -75,7 +76,240 @@ public abstract class MatCompressor
     /// Gets or sets the default chunk size (in bytes) to be used for compressing mats in chunks. This can help manage memory usage and improve performance when dealing with large matrices.
     /// </summary>
     public static int DefaultBufferChunkSize { get; set; } = 64 * 1024;
+    #endregion
 
+    #region Properties
+    /// <summary>
+    /// Gets a unique identifier for the compressor, combining the provider and name properties.
+    /// This can be useful for distinguishing between different compressors, especially if multiple compressors share the same name but come from different providers or libraries.
+    /// </summary>
+    public string Id => $"{Provider}#{Name}";
+
+    /// <summary>
+    /// Gets the provider or library used by this compressor, if applicable.
+    /// This can be useful for informational purposes or to identify the underlying implementation of the compressor (e.g., "Brotli", "ZLib", "LZ4", etc.).
+    /// By default, it returns ".NET" to indicate that the compressor is implemented using .NET's built-in compression libraries, but derived classes can override this property to specify a different provider if they use an external library or custom implementation.
+    /// </summary>
+    public virtual string Provider => ".NET";
+
+    /// <summary>
+    /// Gets the name of the compressor. This should be a unique name that identifies the specific compression algorithm or method implemented by this compressor (e.g., "Brotli", "ZLib", "LZ4", etc.).
+    /// The name is used in the <see cref="Id"/> property to create a unique identifier for the compressor and can also be used for display purposes when listing available compressors or providing information about the compressor being used.
+    /// </summary>
+    public abstract string Name { get; }
+
+    /// <summary>
+    /// Gets the minimum compression level supported by this compressor. This can be used to validate user input or to provide information about the range of valid compression levels for this compressor.<br/>
+    /// By default, it returns 0, which typically represents the lowest level of compression (or no compression) in many compression libraries, but derived classes can override this property to specify a different minimum level if their compression algorithm uses a different scale or range for compression levels.
+    /// </summary>
+    public virtual int MinimumCompressionLevel => 0;
+
+    /// <summary>
+    /// Gets the maximum compression level supported by this compressor. This can be used to validate user input or to provide information about the range of valid compression levels for this compressor.<br/>
+    /// By default, it returns <see cref="CompressionLevel.SmallestSize"/> which is <c>3</c>, which typically represents the highest level of compression in many compression libraries, but derived classes can override this property to specify a different maximum level if their compression algorithm uses a different scale or range for compression levels.
+    /// </summary>
+    public virtual int MaximumCompressionLevel => 3;
+
+    /// <summary>
+    /// Gets the growth strategy used by stream-based compressors.
+    /// </summary>
+    protected virtual SparseBufferGrowth BufferGrowth => SparseBufferGrowth.Linear;
+    #endregion
+
+    #region Utility Methods
+    /// <summary>
+    /// Converts a <see cref="CompressionLevel"/> enum value to the corresponding integer compression level used by the compressor.
+    /// This method can be overridden by derived classes to provide custom logic for mapping the standard <see cref="CompressionLevel"/> values to the specific integer levels expected by the underlying compression algorithm.<br/>
+    /// By default, it simply casts the <see cref="CompressionLevel"/> to an integer, which works for many compressors that use the standard .NET compression levels, but some compressors may require a different mapping or scaling of these values.
+    /// </summary>
+    /// <param name="compressionLevel">The <see cref="CompressionLevel"/> value to convert.</param>
+    /// <returns>The corresponding integer compression level.</returns>
+    protected virtual int GetCompressionLevel(CompressionLevel compressionLevel)
+    {
+        return (int)compressionLevel;
+    }
+
+    /// <summary>
+    /// Determines the optimal buffer chunk size for compressing the given <see cref="Mat"/>. This method can be overridden by derived classes to provide custom logic for determining the chunk size based on the characteristics of the matrix, such as its dimensions, data type, or memory usage. By default, it returns the minimum of a predefined default chunk size and the total byte length of the matrix data to ensure efficient memory usage during compression.
+    /// </summary>
+    /// <param name="mat">The <see cref="Mat"/> for which to determine the optimal buffer chunk size.</param>
+    /// <returns>The optimal buffer chunk size in bytes.</returns>
+    protected virtual int GetOptimalBufferChunkSize(Mat mat)
+    {
+        return Math.Min(DefaultBufferChunkSize, mat.ByteCountInt32);
+    }
+
+    /// <summary>
+    /// Creates a sparse byte buffer for stream-based compressors.
+    /// </summary>
+    /// <param name="mat">The <see cref="Mat"/> to compress.</param>
+    /// <returns>A sparse byte buffer sized for the source matrix.</returns>
+    protected SparseBufferWriter<byte> CreateCompressionBuffer(Mat mat)
+    {
+        return new SparseBufferWriter<byte>(GetOptimalBufferChunkSize(mat), BufferGrowth);
+    }
+
+    /// <summary>
+    /// Validates that the provided compression level is within the supported range for this compressor.<br/>
+    /// If the compression level is outside the valid range, an <see cref="ArgumentOutOfRangeException"/> is thrown with a descriptive error message indicating the valid range and the compressor details.
+    /// </summary>
+    /// <param name="compressionLevel">The compression level to validate.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if the compression level is outside the valid range.</exception>
+    protected void ValidateCompressionLevel(int compressionLevel)
+    {
+        if (MinimumCompressionLevel == MaximumCompressionLevel) return; // No validation needed if there's only one valid level. Often this is None compression.
+        if (compressionLevel < MinimumCompressionLevel || compressionLevel > MaximumCompressionLevel)
+        {
+            throw new ArgumentOutOfRangeException(nameof(compressionLevel),
+                $"Compression level must be between {MinimumCompressionLevel} and {MaximumCompressionLevel} for compressor '{Name}' from '{Provider}'.");
+        }
+    }
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Compresses the <see cref="Mat"/> into a byte array using the default compression level (<see cref="DefaultCompressionLevel"/>).
+    /// </summary>
+    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
+    /// <returns>A byte array containing the compressed data.</returns>
+    public byte[] Compress(Mat src)
+    {
+        return Compress(src, DefaultCompressionLevel);
+    }
+
+    /// <summary>
+    /// Compresses the <see cref="Mat"/> into a byte array.
+    /// </summary>
+    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
+    /// <param name="compressionLevel">The compression level to use.</param>
+    /// <returns>A byte array containing the compressed data.</returns>
+    public byte[] Compress(Mat src, int compressionLevel)
+    {
+        if (src.IsEmpty) return [];
+        ValidateCompressionLevel(compressionLevel);
+        return CompressCore(src, compressionLevel);
+    }
+
+    /// <summary>
+    /// Compresses the <see cref="Mat"/> into a byte array.
+    /// </summary>
+    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
+    /// <param name="compressionLevel">The compression level to use.</param>
+    /// <returns>A byte array containing the compressed data.</returns>
+    public byte[] Compress(Mat src, CompressionLevel compressionLevel)
+    {
+        return Compress(src, GetCompressionLevel(compressionLevel));
+    }
+
+    /// <summary>
+    /// Performs the actual compression. Only called when <paramref name="src"/> is non-empty.
+    /// </summary>
+    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
+    /// <param name="compressionLevel">The compression level to use.</param>
+    /// <returns>A byte array containing the compressed data.</returns>
+    protected abstract byte[] CompressCore(Mat src, int compressionLevel);
+
+    /// <summary>
+    /// Decompresses the <see cref="Mat"/> from a byte array.
+    /// </summary>
+    /// <param name="compressedBytes">The byte array containing the compressed data.</param>
+    /// <param name="dst">The destination <see cref="Mat"/> to store the decompressed data.</param>
+    public void Decompress(byte[] compressedBytes, Mat dst)
+    {
+        if (compressedBytes.Length == 0) return;
+        DecompressCore(compressedBytes, dst);
+    }
+
+    /// <summary>
+    /// Performs the actual decompression. Only called when <paramref name="compressedBytes"/> is non-empty.
+    /// </summary>
+    /// <param name="compressedBytes">The byte array containing the compressed data.</param>
+    /// <param name="dst">The destination <see cref="Mat"/> to store the decompressed data.</param>
+    protected abstract void DecompressCore(byte[] compressedBytes, Mat dst);
+
+    /// <summary>
+    /// Compresses the <see cref="Mat"/> into a byte array asynchronously.
+    /// </summary>
+    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a byte array with the compressed data.</returns>
+    public Task<byte[]> CompressAsync(Mat src, CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => Compress(src), cancellationToken);
+    }
+
+    /// <summary>
+    /// Compresses the <see cref="Mat"/> into a byte array asynchronously.
+    /// </summary>
+    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
+    /// <param name="compressionLevel">The compression level to use.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a byte array with the compressed data.</returns>
+    public Task<byte[]> CompressAsync(Mat src, int compressionLevel, CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => Compress(src, compressionLevel), cancellationToken);
+    }
+
+    /// <summary>
+    /// Compresses the <see cref="Mat"/> into a byte array asynchronously.
+    /// </summary>
+    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
+    /// <param name="compressionLevel">The compression level to use.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a byte array with the compressed data.</returns>
+    public Task<byte[]> CompressAsync(Mat src, CompressionLevel compressionLevel, CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => Compress(src, compressionLevel), cancellationToken);
+    }
+
+    /// <summary>
+    /// Decompresses the <see cref="Mat"/> from a byte array asynchronously.
+    /// </summary>
+    /// <param name="compressedBytes">The byte array containing the compressed data.</param>
+    /// <param name="dst">The destination <see cref="Mat"/> to store the decompressed data.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public Task DecompressAsync(byte[] compressedBytes, Mat dst, CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => Decompress(compressedBytes, dst), cancellationToken);
+    }
+    #endregion
+
+    #region Formatters
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return $"Provider: {Provider}, Compressor: {Name}";
+    }
+    #endregion
+
+    #region Equality Members
+    /// <inheritdoc />
+    public bool Equals(MatCompressor? other)
+    {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
+        return Id == other.Id;
+    }
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj)
+    {
+        if (obj is null) return false;
+        if (ReferenceEquals(this, obj)) return true;
+        if (obj.GetType() != GetType()) return false;
+        return Equals((MatCompressor)obj);
+    }
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        return Id.GetHashCode();
+    }
+    #endregion
+
+    #region Static Methods
     /// <summary>
     /// Gets a compressor by its <see cref="Id"/> from the collection of available compressors.
     /// </summary>
@@ -101,49 +335,6 @@ public abstract class MatCompressor
     }
 
     /// <summary>
-    /// Gets a unique identifier for the compressor, combining the provider and name properties.
-    /// This can be useful for distinguishing between different compressors, especially if multiple compressors share the same name but come from different providers or libraries.
-    /// </summary>
-    public string Id => $"{Provider}#{Name}";
-
-    /// <summary>
-    /// Gets the name of the compressor
-    /// </summary>
-    public abstract string Name { get; }
-
-    /// <summary>
-    /// Gets the provider or library used by this compressor, if applicable.
-    /// This can be useful for informational purposes or to identify the underlying implementation of the compressor (e.g., "Brotli", "ZLib", "LZ4", etc.).
-    /// By default, it returns ".NET" to indicate that the compressor is implemented using .NET's built-in compression libraries, but derived classes can override this property to specify a different provider if they use an external library or custom implementation.
-    /// </summary>
-    public virtual string Provider => ".NET";
-
-    /// <summary>
-    /// Gets the growth strategy used by stream-based compressors.
-    /// </summary>
-    protected virtual SparseBufferGrowth BufferGrowth => SparseBufferGrowth.Linear;
-
-    /// <summary>
-    /// Determines the optimal buffer chunk size for compressing the given <see cref="Mat"/>. This method can be overridden by derived classes to provide custom logic for determining the chunk size based on the characteristics of the matrix, such as its dimensions, data type, or memory usage. By default, it returns the minimum of a predefined default chunk size and the total byte length of the matrix data to ensure efficient memory usage during compression.
-    /// </summary>
-    /// <param name="mat">The <see cref="Mat"/> for which to determine the optimal buffer chunk size.</param>
-    /// <returns>The optimal buffer chunk size in bytes.</returns>
-    protected virtual int GetOptimalBufferChunkSize(Mat mat)
-    {
-        return Math.Min(DefaultBufferChunkSize, mat.ByteCountInt32);
-    }
-
-    /// <summary>
-    /// Creates a sparse byte buffer for stream-based compressors.
-    /// </summary>
-    /// <param name="mat">The <see cref="Mat"/> to compress.</param>
-    /// <returns>A sparse byte buffer sized for the source matrix.</returns>
-    protected SparseBufferWriter<byte> CreateCompressionBuffer(Mat mat)
-    {
-        return new SparseBufferWriter<byte>(GetOptimalBufferChunkSize(mat), BufferGrowth);
-    }
-
-    /// <summary>
     /// Creates a writable stream over a sparse compression buffer.
     /// </summary>
     /// <param name="buffer">The sparse byte buffer.</param>
@@ -152,150 +343,5 @@ public abstract class MatCompressor
     {
         return Stream.Create(buffer, true);
     }
-
-    /// <summary>
-    /// Compresses the <see cref="Mat"/> into a byte array using the default compression level (<see cref="DefaultCompressionLevel"/>).
-    /// </summary>
-    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
-    /// <returns>A byte array containing the compressed data.</returns>
-    public virtual byte[] Compress(Mat src)
-    {
-        return Compress(src, DefaultCompressionLevel);
-    }
-
-    /// <summary>
-    /// Compresses the <see cref="Mat"/> into a byte array.
-    /// </summary>
-    /// <param name="src"></param>
-    /// <param name="compressionLevel"></param>
-    /// <returns></returns>
-    public virtual byte[] Compress(Mat src, int compressionLevel)
-    {
-        return Compress(src, CompressionExtensions.GetCompressionLevel(compressionLevel));
-    }
-
-    /// <summary>
-    /// Compresses the <see cref="Mat"/> into a byte array.
-    /// </summary>
-    /// <param name="src"></param>
-    /// <param name="compressionLevel"></param>
-    /// <returns></returns>
-    public byte[] Compress(Mat src, CompressionLevel compressionLevel)
-    {
-        if (src.IsEmpty) return [];
-        return CompressCore(src, compressionLevel);
-    }
-
-    /// <summary>
-    /// Performs the actual compression. Only called when <paramref name="src"/> is non-empty.
-    /// </summary>
-    /// <param name="src"></param>
-    /// <param name="compressionLevel"></param>
-    /// <returns></returns>
-    protected abstract byte[] CompressCore(Mat src, CompressionLevel compressionLevel);
-
-    /// <summary>
-    /// Decompresses the <see cref="Mat"/> from a byte array.
-    /// </summary>
-    /// <param name="compressedBytes"></param>
-    /// <param name="dst"></param>
-    public void Decompress(byte[] compressedBytes, Mat dst)
-    {
-        if (compressedBytes.Length == 0) return;
-        DecompressCore(compressedBytes, dst);
-    }
-
-    /// <summary>
-    /// Performs the actual decompression. Only called when <paramref name="compressedBytes"/> is non-empty.
-    /// </summary>
-    /// <param name="compressedBytes"></param>
-    /// <param name="dst"></param>
-    protected abstract void DecompressCore(byte[] compressedBytes, Mat dst);
-
-    /// <summary>
-    /// Compresses the <see cref="Mat"/> into a byte array asynchronously.
-    /// </summary>
-    /// <param name="src">The source <see cref="Mat"/> to compress.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains a byte array with the compressed data.</returns>
-    public Task<byte[]> CompressAsync(Mat src, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => Compress(src), cancellationToken);
-    }
-
-    /// <summary>
-    /// Compresses the <see cref="Mat"/> into a byte array asynchronously.
-    /// </summary>
-    public Task<byte[]> CompressAsync(Mat src, int compressionLevel, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => Compress(src, compressionLevel), cancellationToken);
-    }
-
-    /// <summary>
-    /// Compresses the <see cref="Mat"/> into a byte array asynchronously.
-    /// </summary>
-    public Task<byte[]> CompressAsync(Mat src, CompressionLevel compressionLevel, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => Compress(src, compressionLevel), cancellationToken);
-    }
-
-    /// <summary>
-    /// Decompresses the <see cref="Mat"/> from a byte array asynchronously.
-    /// </summary>
-    public Task DecompressAsync(byte[] compressedBytes, Mat dst, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => Decompress(compressedBytes, dst), cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public override string ToString()
-    {
-        return $"Compressor: {Name}, Provider: {Provider}";
-    }
+    #endregion
 }
-
-/*
-#region LZ4
-public sealed class MatCompressorLz4 : MatCompressor
-{
-    public static readonly MatCompressorLz4 Instance = new();
-
-    private MatCompressorLz4() { }
-
-    private static LZ4Level GetLZ4Level() => CoreSettings.DefaultLayerCompressionLevel switch
-    {
-        LayerCompressionLevel.Lowest => LZ4Level.L00_FAST,
-        LayerCompressionLevel.Highest => LZ4Level.L12_MAX,
-        _ => LZ4Level.L10_OPT
-    };
-
-    public override byte[] Compress(Mat src, CompressionLevel compressionLevel, object? argument = null)
-    {
-        using var compressedStream = StreamExtensions.RecyclableMemoryStreamManager.GetStream();
-        using (var lz4Stream = LZ4Stream.Encode(compressedStream, GetLZ4Level(), leaveOpen: true))
-        {
-            CompressToStream(src, lz4Stream, argument);
-        }
-
-        return compressedStream.TryGetBuffer(out var buffer)
-            ? buffer.ToArray()
-            : compressedStream.ToArray();
-    }
-
-    public override void Decompress(byte[] compressedBytes, Mat dst, object? argument = null)
-    {
-        unsafe
-        {
-            fixed (byte* pBuffer = compressedBytes)
-            {
-                using var compressedStream = new UnmanagedMemoryStream(pBuffer, compressedBytes.Length);
-                using var lz4Stream = LZ4Stream.Decode(compressedStream, leaveOpen: true);
-                lz4Stream.ReadExactly(dst.GetDataByteSpan());
-            }
-        }
-    }
-
-    public override string ToString() => "LZ4";
-}
-#endregion
-*/

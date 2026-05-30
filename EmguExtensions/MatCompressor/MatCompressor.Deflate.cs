@@ -36,16 +36,16 @@ public sealed class MatCompressorDeflate : MatCompressor
     public static readonly MatCompressorDeflate Instance = new();
 
     /// <inheritdoc />
-    public override string Name => "Deflate";
-
-    /// <inheritdoc />
     private MatCompressorDeflate() { }
 
     /// <inheritdoc />
-    protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
+    public override string Name => "Deflate";
+
+    /// <inheritdoc />
+    protected override byte[] CompressCore(Mat src, int compressionLevel)
     {
         using var buffer = CreateCompressionBuffer(src);
-        using (var deflateStream = new DeflateStream(CreateCompressionStream(buffer), compressionLevel))
+        using (var deflateStream = new DeflateStream(CreateCompressionStream(buffer), (CompressionLevel)compressionLevel))
         {
             src.CopyTo(deflateStream);
         }

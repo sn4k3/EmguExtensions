@@ -37,16 +37,16 @@ public sealed class MatCompressorZstd : MatCompressor
     public static readonly MatCompressorZstd Instance = new();
 
     /// <inheritdoc />
-    public override string Name => "Zstandard";
-
-    /// <inheritdoc />
     private MatCompressorZstd() { }
 
     /// <inheritdoc />
-    protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
+    public override string Name => "Zstandard";
+
+    /// <inheritdoc />
+    protected override byte[] CompressCore(Mat src, int compressionLevel)
     {
         using var buffer = CreateCompressionBuffer(src);
-        using (var zstdStream = new ZStandardStream(CreateCompressionStream(buffer), compressionLevel))
+        using (var zstdStream = new ZStandardStream(CreateCompressionStream(buffer), (CompressionLevel)compressionLevel))
         {
             src.CopyTo(zstdStream);
         }

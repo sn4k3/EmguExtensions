@@ -142,7 +142,7 @@ public static partial class EmguCvExtensions
         public byte[] GetPngBytes(int pngCompressionLevel)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(pngCompressionLevel);
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pngCompressionLevel, 10);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(pngCompressionLevel, 9);
             return CvInvoke.Imencode(".png", src, new KeyValuePair<ImwriteFlags, int>(ImwriteFlags.PngCompression, pngCompressionLevel));
         }
 

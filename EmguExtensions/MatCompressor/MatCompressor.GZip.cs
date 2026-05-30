@@ -36,16 +36,16 @@ public sealed class MatCompressorGZip : MatCompressor
     public static readonly MatCompressorGZip Instance = new();
 
     /// <inheritdoc />
-    public override string Name => "GZip";
-
-    /// <inheritdoc />
     private MatCompressorGZip() { }
 
     /// <inheritdoc />
-    protected override byte[] CompressCore(Mat src, CompressionLevel compressionLevel)
+    public override string Name => "GZip";
+
+    /// <inheritdoc />
+    protected override byte[] CompressCore(Mat src, int compressionLevel)
     {
         using var buffer = CreateCompressionBuffer(src);
-        using (var gzipStream = new GZipStream(CreateCompressionStream(buffer), compressionLevel))
+        using (var gzipStream = new GZipStream(CreateCompressionStream(buffer), (CompressionLevel)compressionLevel))
         {
             src.CopyTo(gzipStream);
         }
