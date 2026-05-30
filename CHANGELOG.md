@@ -1,3 +1,6 @@
+# v0.1.5 (30/05/2026)
+- Improve the `MatCompressor` schemantic by favor int compressionLevel instead of enum
+
 # v0.1.4 (29/05/2026)
 - Add StageKit.Primitives dependency and related using imports
 - Add a new EmguExtensions.Avalonia project (bitmap helpers and Mat→WriteableBitmap converters) and a BitmapInfo record for describing locked framebuffer state.
