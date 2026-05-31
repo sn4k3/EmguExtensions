@@ -11,7 +11,7 @@ A high-performance .NET library that extends [Emgu.CV](https://www.emgu.com) (Op
 ## Features
 
 - **Span-based Mat access** - Zero-copy `GetSpan<T>`, `GetSpan2D<T>`, and `GetReadOnlySpan2D<T>` accessors for fast pixel manipulation
-- **ROI utilities** - `Roi`, `SafeRoi` (clamped), and `RoiFromCenter` for safe region-of-interest cropping
+- **ROI utilities** - `Roi`, `SafeRoi`, `ConstrainRoi`, and `RoiFromCenter` for bounded region-of-interest cropping with configurable empty-ROI behavior
 - **Image transforms** - Rotate with adjusted bounds, letterbox creation, crop-by-bounds, and shrink-to-fit resizing that reports whether the image changed
 - **Mat compression** - Pluggable compressors (PNG, Deflate, GZip, ZLib, Brotli, Zstd) with `CMat` for memory-efficient compressed image storage. `CMat.Compress` is thread-safe — concurrent calls are serialized automatically
 - **Contour hierarchies** - Structured `EmguContour`, `EmguContours`, and `EmguContourFamily` wrappers for OpenCV contour trees using hierarchy links
@@ -63,8 +63,26 @@ span2D[10, 20] = 128; // Row 10, Col 20
 ```csharp
 using var source = CvInvoke.Imread("image.png");
 
-// SafeRoi clamps to mat bounds - never throws on out-of-range coordinates
-using var roi = source.SafeRoi(new Rectangle(-10, -10, 200, 200));
+// SafeRoi clamps to mat bounds and updates the rectangle with the effective ROI.
+var roiRect = new Rectangle(-10, -10, 200, 200);
+using var roi = source.SafeRoi(ref roiRect);
+
+// Padding can be applied while still keeping the ROI inside the source bounds.
+var paddedRect = new Rectangle(40, 40, 120, 80);
+using var paddedRoi = source.SafeRoi(ref paddedRect, padding: 16);
+
+// ConstrainRoi only updates the rectangle and reports whether it changed.
+var candidate = new Rectangle(0, 0, 500, 500);
+bool changed = source.ConstrainRoi(ref candidate);
+
+// Empty ROI behavior is explicit when a requested ROI becomes empty.
+var emptyRect = Rectangle.Empty;
+using var fullSource = source.SafeRoi(ref emptyRect, EmptyRoiBehavior.CaptureSource);
+
+// Other options:
+// EmptyRoiBehavior.Default        -> use OpenCV's default behavior for empty ROI
+// EmptyRoiBehavior.CaptureSource  -> use the full source image
+// EmptyRoiBehavior.ThrowException -> throw InvalidOperationException
 ```
 
 ### Image Sizing and Transforms
@@ -246,60 +264,6 @@ AMD Ryzen 9 7845HX with Radeon Graphics 3.00GHz, 1 CPU, 24 logical and 12 physic
 | GetRawData            | 3840    | 1,582.3 us | 21.02 us | 19.66 us |  1.10 |    0.03 | 500.0000 | 500.0000 | 500.0000 |  14.06 MB |        1.00 |
 ```
 
-## Project Structure
-
-```
-EmguExtensions/
-  Extensions/
-    EmguExtensions.cs           # Mat span accessors, ROI, copy, transforms, drawing, shrink-to-fit
-    EmguExtensions.Constants.cs # Predefined colors, anchor, shared stream manager
-    EmguExtensions.Static.cs    # Text measurement, kernel creation, Mat factories
-    DrawingExtensions.cs        # Color scaling, polygon geometry and vertices
-    PointExtensions.cs          # Euclidean distance, rotation around a pivot
-    ArrayExtensions.cs          # High-performance uninitialized-memory array copy
-    StreamExtensions.cs         # MemoryStream.ToArrayPerf — copy buffer without zero-init
-    CompressionExtensions.cs    # CompressionLevel enum mapping (0–3 → enum)
-    StaticObjects.cs            # Internal: line-break character constants
-  MatCompressor/
-    MatCompressor.cs            # Abstract base — template method, async overloads
-    MatCompressor.None.cs       # Raw (uncompressed) passthrough
-    MatCompressor.Png.cs        # PNG via OpenCV Imdecode/Imencode
-    MatCompressor.Deflate.cs    # Deflate stream
-    MatCompressor.GZip.cs       # GZip stream
-    MatCompressor.ZLib.cs       # ZLib stream
-    MatCompressor.Brotli.cs     # Brotli stream
-    MatCompressor.Zstd.cs       # Zstandard stream (.NET 11+)
-    CMat.cs                     # Compressed Mat — thread-safe Compress, XxHash3 equality
-  Contours/
-    EmguContour.cs              # Single contour wrapper (lazy bounds, area, perimeter, disposal guards)
-    EmguContours.cs             # Contour collection with hierarchy-link tree and grouping helpers
-    EmguContourFamily.cs        # Tree node: Self, Depth, Parent, Count/children traversal
-  Handlers/
-    DisposableObject.cs         # Abstract full Dispose pattern base with atomic dispose guard
-    LeaveOpenDisposableObject.cs # Dispose with leave-open semantics
-    GCSafeHandle.cs             # SafeHandle wrapper for GCHandle pinning
-  Strides/
-    GreyLine.cs                 # Straight run of pixels with the same grey value (line scan)
-    GreyStride.cs               # Contiguous pixel run with index, location, and grey value
-  MatRoi.cs                     # ROI crop with optional per-edge padding
-  Enums/
-    PutTextLineAlignment.cs     # None | Left | Center | Right for PutTextExtended
-EmguExtensions.Tests/           # xUnit test suite
-  MatFactory.cs                 # Shared Mat helpers for tests
-  UnitTestCMat.cs               # CMat compression/decompression tests
-  UnitTestCMatThreadSafety.cs   # CMat concurrent Compress thread-safety tests
-  UnitTestEmguContours.cs       # Contour hierarchy tests
-  UnitTestEmguExtensions.cs     # Extension method tests
-  UnitTestFindMethods.cs        # Pixel-find method tests
-  UnitTestMatRoi.cs             # MatRoi crop and padding tests
-  UnitTestScanMethods.cs        # Scan/stride method tests
-EmguExtensions.Benchmarks/      # BenchmarkDotNet performance benchmarks
-  MatCompressorBenchmarks.cs    # Compress/Decompress measurements across compressors and levels
-  MatToArrayBenchmarks.cs       # Mat-to-array conversion micro-benchmarks
-  RedundantCompressorLevelFilter.cs # Filter to skip redundant compressor/level pairs
-  Program.cs                    # Benchmark runner entry point
-```
-
 ## Building from Source
 
 ```bash
@@ -311,7 +275,7 @@ dotnet build
 dotnet test EmguExtensions.Tests
 
 # Pack for NuGet (Release only)
-dotnet pack EmguExtensions --configuration Release --output .
+dotnet pack --configuration Release --output .
 ```
 
 ## Contributing
