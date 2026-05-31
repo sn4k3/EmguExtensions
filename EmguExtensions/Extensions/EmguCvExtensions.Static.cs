@@ -54,7 +54,7 @@ public static partial class EmguCvExtensions
         ArgumentNullException.ThrowIfNull(line);
         return lineAlignment switch
         {
-            PutTextLineAlignment.None => line.TrimEnd(),
+            PutTextLineAlignment.Default => line.TrimEnd(),
             PutTextLineAlignment.Left or PutTextLineAlignment.Center or PutTextLineAlignment.Right => line.Trim(),
             _ => throw new ArgumentOutOfRangeException(nameof(lineAlignment), lineAlignment, null)
         };

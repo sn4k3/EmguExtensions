@@ -60,24 +60,6 @@ public class MatRoi : LeaveOpenDisposableObject
     public bool IsSourceSameSizeOfRoi => SourceMat.Size == Roi.Size;
 
     /// <summary>
-    /// Initializes a new instance of the MatRoi class, representing a region of interest (ROI) within a source matrix.
-    /// </summary>
-    /// <remarks>The RoiMat property contains the cropped region defined by the roi parameter. Ensure that
-    /// the roi parameter does not exceed the dimensions of the source matrix to avoid runtime errors.</remarks>
-    /// <param name="mat">The source matrix from which the region of interest is derived. This matrix must not be null.</param>
-    /// <param name="roi">The rectangle that defines the region of interest within the source matrix. The rectangle must be fully
-    /// contained within the bounds of the source matrix.</param>
-    /// <param name="leaveOpen">true to leave the source matrix open after the MatRoi instance is disposed; otherwise, false to dispose the
-    /// source matrix when the MatRoi instance is disposed. Defaults to <see langword="true"/> because the caller typically owns the source Mat.</param>
-    public MatRoi(Mat mat, Rectangle roi, bool leaveOpen = true) : base(leaveOpen)
-    {
-        ArgumentNullException.ThrowIfNull(mat);
-        SourceMat = mat;
-        RoiMat = mat.SafeRoi(roi, out var rectangle);
-        Roi = rectangle;
-    }
-
-    /// <summary>
     /// Initializes a new instance of the MatRoi class, representing a region of interest (ROI) within a source matrix,
     /// with optional padding on each side.
     /// </summary>
@@ -93,8 +75,8 @@ public class MatRoi : LeaveOpenDisposableObject
     {
         ArgumentNullException.ThrowIfNull(mat);
         SourceMat = mat;
-        RoiMat = mat.SafeRoi(roi, out var rectangle, padLeft, padTop, padRight, padBottom);
-        Roi = rectangle;
+        RoiMat = mat.SafeRoi(ref roi, EmptyRoiBehavior.Default, padLeft, padTop, padRight, padBottom);
+        Roi = roi;
     }
 
     /// <summary>
@@ -111,12 +93,8 @@ public class MatRoi : LeaveOpenDisposableObject
     /// cropped region if space allows.</param>
     /// <param name="leaveOpen">true to leave the source matrix open and accessible after the MatRoi instance is disposed; otherwise, false to
     /// dispose the source matrix when the MatRoi is disposed. Defaults to <see langword="true"/> because the caller typically owns the source Mat.</param>
-    public MatRoi(Mat mat, Rectangle roi, Size padding, bool leaveOpen = true) : base(leaveOpen)
+    public MatRoi(Mat mat, Rectangle roi, Size padding, bool leaveOpen = true) : this(mat, roi, padding.Width, padding.Height, padding.Width, padding.Height, leaveOpen)
     {
-        ArgumentNullException.ThrowIfNull(mat);
-        SourceMat = mat;
-        RoiMat = mat.SafeRoi(roi, out var rectangle, padding);
-        Roi = rectangle;
     }
 
     /// <summary>
@@ -133,12 +111,22 @@ public class MatRoi : LeaveOpenDisposableObject
     /// cropped region if space allows.</param>
     /// <param name="leaveOpen">true to leave the source matrix open and accessible after the MatRoi instance is disposed; otherwise, false to
     /// dispose the source matrix when the MatRoi is disposed. Defaults to <see langword="true"/> because the caller typically owns the source Mat.</param>
-    public MatRoi(Mat mat, Rectangle roi, int padding, bool leaveOpen = true) : base(leaveOpen)
+    public MatRoi(Mat mat, Rectangle roi, int padding, bool leaveOpen = true) : this(mat, roi, padding, padding, padding, padding, leaveOpen)
     {
-        ArgumentNullException.ThrowIfNull(mat);
-        SourceMat = mat;
-        RoiMat = mat.SafeRoi(roi, out var rectangle, padding);
-        Roi = rectangle;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the MatRoi class, representing a region of interest (ROI) within a source matrix.
+    /// </summary>
+    /// <remarks>The RoiMat property contains the cropped region defined by the roi parameter. Ensure that
+    /// the roi parameter does not exceed the dimensions of the source matrix to avoid runtime errors.</remarks>
+    /// <param name="mat">The source matrix from which the region of interest is derived. This matrix must not be null.</param>
+    /// <param name="roi">The rectangle that defines the region of interest within the source matrix. The rectangle must be fully
+    /// contained within the bounds of the source matrix.</param>
+    /// <param name="leaveOpen">true to leave the source matrix open after the MatRoi instance is disposed; otherwise, false to dispose the
+    /// source matrix when the MatRoi instance is disposed. Defaults to <see langword="true"/> because the caller typically owns the source Mat.</param>
+    public MatRoi(Mat mat, Rectangle roi, bool leaveOpen = true) : this(mat, roi, 0, 0, 0, 0, leaveOpen)
+    {
     }
 
     /// <summary>
@@ -147,7 +135,7 @@ public class MatRoi : LeaveOpenDisposableObject
     /// <param name="matRoi">The existing MatRoi instance from which to create the new instance. Cannot be null.</param>
     /// <param name="roi">The rectangle that defines the new region of interest within the source matrix. The rectangle must be fully
     /// contained within the bounds of the source matrix.</param>
-    public MatRoi(MatRoi matRoi, Rectangle roi) : this(matRoi.SourceMat, roi, true)
+    public MatRoi(MatRoi matRoi, Rectangle roi) : this(matRoi.SourceMat, roi)
     {
     }
 
@@ -258,6 +246,7 @@ public class MatRoi : LeaveOpenDisposableObject
     }
     #endregion
 
+    #region Disposable
     /// <inheritdoc />
     protected override void DisposeManaged()
     {
@@ -267,4 +256,5 @@ public class MatRoi : LeaveOpenDisposableObject
             SourceMat.Dispose();
         }
     }
+    #endregion
 }

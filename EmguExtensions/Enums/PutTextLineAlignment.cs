@@ -22,6 +22,8 @@
 *   SOFTWARE.
 */
 
+using System.ComponentModel;
+
 namespace EmguExtensions;
 
 /// <summary>
@@ -32,20 +34,24 @@ public enum PutTextLineAlignment
     /// <summary>
     /// Left aligned without trimming, openCV default call
     /// </summary>
-    None,
+    [Description("Left aligned")]
+    Default,
 
     /// <summary>
     /// Left aligned and trimmed
     /// </summary>
+    [Description("Left aligned and trimmed")]
     Left,
 
     /// <summary>
     /// Center aligned and trimmed
     /// </summary>
+    [Description("Center aligned and trimmed")]
     Center,
 
     /// <summary>
     /// Right aligned and trimmed
     /// </summary>
+    [Description("Right aligned and trimmed")]
     Right
 }

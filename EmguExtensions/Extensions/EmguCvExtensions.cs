@@ -250,7 +250,7 @@ public static partial class EmguCvExtensions
             }
 
             // If line needs alignment, calculate the size for each line
-            if (lineAlignment is not PutTextLineAlignment.Left and not PutTextLineAlignment.None)
+            if (lineAlignment is not PutTextLineAlignment.Left and not PutTextLineAlignment.Default)
             {
                 for (var i = 0; i < lines.Length; i++)
                 {
@@ -267,7 +267,7 @@ public static partial class EmguCvExtensions
 
                 int x = lineAlignment switch
                 {
-                    PutTextLineAlignment.None or PutTextLineAlignment.Left => org.X,
+                    PutTextLineAlignment.Default or PutTextLineAlignment.Left => org.X,
                     PutTextLineAlignment.Center => org.X + (width - linesSize[i].Width) / 2,
                     PutTextLineAlignment.Right => org.X + width - linesSize[i].Width,
                     _ => throw new ArgumentOutOfRangeException(nameof(lineAlignment), lineAlignment, null)
@@ -388,7 +388,7 @@ public static partial class EmguCvExtensions
                 }
                 else
                 {
-                    var srcSpan = src.GetSpan2D<byte>();
+                    var srcSpan = src.GetReadOnlySpan2DOfBytes();
                     var dstSpan = new Span<byte>(destination.ToPointer(), (int)srcSpan.Length);
                     srcSpan.CopyTo(dstSpan);
 
@@ -412,43 +412,17 @@ public static partial class EmguCvExtensions
         {
             if (src.IsContinuous)
             {
-                stream.Write(src.GetSpan<byte>());
+                stream.Write(src.GetReadOnlySpanOfBytes());
             }
             else
             {
                 // Non-continuous Mat: write row by row
-                var span2D = src.GetSpan2D<byte>();
+                var span2D = src.GetReadOnlySpan2DOfBytes();
                 for (var row = 0; row < span2D.Height; row++)
                 {
                     stream.Write(span2D.GetRowSpan(row));
                 }
             }
-        }
-
-        /// <summary>
-        /// Asynchronously copies the contents of the matrix to the specified stream.
-        /// </summary>
-        /// <remarks>For continuous matrices this performs a zero-copy async write directly from the
-        /// underlying unmanaged memory. Non-continuous matrices are materialized into a single buffer (synchronously,
-        /// on the calling thread) before writing. The caller must not mutate or dispose the source matrix while the
-        /// returned task is in flight; <see cref="Mat"/> is not thread-safe.</remarks>
-        /// <param name="stream">The destination stream.</param>
-        /// <param name="cancellationToken">A token to cancel the operation.</param>
-        /// <returns>A task that represents the asynchronous copy operation.</returns>
-        public async Task CopyToAsync(Stream stream, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(stream);
-
-            if (src.IsContinuous)
-            {
-                await using var source = src.GetUnmanagedMemoryStream(FileAccess.Read);
-                await source.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            // Non-continuous Mat: materialize the rows into a single contiguous buffer, then write
-            var bytes = src.ToArray();
-            await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1048,14 +1022,134 @@ public static partial class EmguCvExtensions
         #endregion
 
         #region ROI methods
+
+        /// <summary>
+        /// Adjusts the provided region of interest (ROI) rectangle to ensure it is valid and constrained within the bounds of the source matrix.
+        /// </summary>
+        /// <param name="roi">The rectangle that defines the region of interest. This parameter is passed by reference and will be modified if the ROI is adjusted.</param>
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the ROI is empty.</param>
+        /// <returns>True if the ROI was adjusted, otherwise false.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the ROI is empty and the behavior is set to throw an exception.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the emptyRoiBehavior value is not recognized.</exception>
+        public bool SanitizeRoiWithBehavior(ref Rectangle roi, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
+        {
+            if (roi.IsEmpty)
+            {
+                switch (emptyRoiBehavior)
+                {
+                    case EmptyRoiBehavior.Default:
+                        break;
+                    case EmptyRoiBehavior.CaptureSource:
+                        roi.X = 0;
+                        roi.Y = 0;
+                        roi.Width = src.Width;
+                        roi.Height = src.Height;
+                        return true;
+                    case EmptyRoiBehavior.ThrowException:
+                        throw new InvalidOperationException("The ROI is empty.");
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(emptyRoiBehavior), emptyRoiBehavior, null);
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Returns a rectangle representing the region of interest (ROI) that is constrained within the bounds of the source matrix, with optional padding.
+        /// </summary>
+        /// <param name="roi">The rectangle that defines the region of interest. This parameter is passed by reference and will be modified if the ROI is adjusted.</param>
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the ROI is empty.</param>
+        /// <param name="padLeft">The number of pixels to add as padding to the left side of the ROI.</param>
+        /// <param name="padTop">The number of pixels to add as padding to the top side of the ROI.</param>
+        /// <param name="padRight">The number of pixels to add as padding to the right side of the ROI.</param>
+        /// <param name="padBottom">The number of pixels to add as padding to the bottom side of the ROI.</param>
+        /// <returns>True if the ROI was modified; otherwise, false.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the ROI is empty or padding is out of bounds and the behavior is set to throw an exception.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when an invalid value is provided for the emptyRoiBehavior parameter.</exception>
+        public bool ConstrainRoi(ref Rectangle roi, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default, int padLeft = 0, int padTop = 0, int padRight = 0, int padBottom = 0)
+        {
+            int x = Math.Max(0, roi.X - padLeft);
+            int y = Math.Max(0, roi.Y - padTop);
+            int right = Math.Min(src.Width, roi.Right + padRight);
+            int bottom = Math.Min(src.Height, roi.Bottom + padBottom);
+            int width = right - x;
+            int height = bottom - y;
+            if (width <= 0 || height <= 0)
+            {
+                switch (emptyRoiBehavior)
+                {
+                    case EmptyRoiBehavior.Default:
+                        x = 0;
+                        y = 0;
+                        width = 0;
+                        height = 0;
+                        break;
+                    case EmptyRoiBehavior.CaptureSource:
+                        x = 0;
+                        y = 0;
+                        width = src.Width;
+                        height = src.Height;
+                        break;
+                    case EmptyRoiBehavior.ThrowException:
+                        throw new InvalidOperationException("The ROI is empty or padding out of bounds.");
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(emptyRoiBehavior), emptyRoiBehavior, null);
+                }
+            }
+
+            if (roi.X == x && roi.Y == y && roi.Width == width && roi.Height == height)
+            {
+                return false;
+            }
+
+            roi.X = x;
+            roi.Y = y;
+            roi.Width = width;
+            roi.Height = height;
+
+            return true;
+
+        }
+
+        /// <summary>
+        /// Returns a rectangle representing the region of interest (ROI) that is constrained within the bounds of the source matrix, with optional padding.
+        /// </summary>
+        /// <param name="roi">The rectangle that defines the region of interest. This parameter is passed by reference and will be modified if the ROI is adjusted.</param>
+        /// <param name="padding">The amount of padding, in pixels, to apply around the region of interest. Padding increases the size of the cropped region if space allows.</param>
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the ROI is empty.</param>
+        /// <returns>True if the ROI was modified; otherwise, false.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the ROI is empty or padding is out of bounds and the behavior is set to throw an exception.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when an invalid value is provided for the emptyRoiBehavior parameter.</exception>
+        public bool ConstrainRoi(ref Rectangle roi, Size padding, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
+        {
+            return src.ConstrainRoi(ref roi, emptyRoiBehavior, padding.Width, padding.Height, padding.Width, padding.Height);
+        }
+
+        /// <summary>
+        /// Returns a rectangle representing the region of interest (ROI) that is constrained within the bounds of the source matrix, with optional padding.
+        /// </summary>
+        /// <param name="roi">The rectangle that defines the region of interest. This parameter is passed by reference and will be modified if the ROI is adjusted.</param>
+        /// <param name="padding">The amount of padding, in pixels, to apply around the region of interest. Padding increases the size of the cropped region if space allows.</param>
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the ROI is empty.</param>
+        /// <returns>True if the ROI was modified; otherwise, false.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the ROI is empty or padding is out of bounds and the behavior is set to throw an exception.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when an invalid value is provided for the emptyRoiBehavior parameter.</exception>
+        public bool ConstrainRoi(ref Rectangle roi, int padding, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
+        {
+            return src.ConstrainRoi(ref roi, emptyRoiBehavior, padding, padding, padding, padding);
+        }
+
         /// <summary>
         /// Extracts a region of interest from the current matrix using the specified rectangle.
         /// </summary>
         /// <param name="roi">The rectangle that defines the region of interest to extract. The coordinates and size must be within the
         /// bounds of the current matrix.</param>
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the ROI is empty.</param>
         /// <returns>A new matrix representing the specified region of interest.</returns>
-        public Mat Roi(Rectangle roi)
+        public Mat Roi(Rectangle roi, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
         {
+            src.SanitizeRoiWithBehavior(ref roi, emptyRoiBehavior);
             return new Mat(src, roi);
         }
 
@@ -1063,10 +1157,13 @@ public static partial class EmguCvExtensions
         /// Extracts a region of interest starting at the origin (0, 0) with the specified size.
         /// </summary>
         /// <param name="size">The size of the region of interest.</param>
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the ROI is empty.</param>
         /// <returns>A new matrix representing the specified region of interest.</returns>
-        public Mat Roi(Size size)
+        public Mat Roi(Size size, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
         {
-            return new Mat(src, new(Point.Empty, size));
+            var roi = new Rectangle(Point.Empty, size);
+            src.SanitizeRoiWithBehavior(ref roi, emptyRoiBehavior);
+            return new Mat(src, roi);
         }
 
         /// <summary>
@@ -1084,16 +1181,49 @@ public static partial class EmguCvExtensions
         /// Calculates the bounding rectangle of non-zero pixels and returns the corresponding region of interest.
         /// </summary>
         /// <param name="boundingRectangle">The bounding rectangle of non-zero pixels.</param>
+        /// <param name="padLeft">The amount of padding to apply to the left side of the bounding rectangle.</param>
+        /// <param name="padTop">The amount of padding to apply to the top side of the bounding rectangle.</param>
+        /// <param name="padRight">The amount of padding to apply to the right side of the bounding rectangle.</param>
+        /// <param name="padBottom">The amount of padding to apply to the bottom side of the bounding rectangle.</param>
         /// <returns>A new matrix representing the bounding rectangle region.</returns>
-        public Mat RoiFromBoundingRectangle(out Rectangle boundingRectangle)
+        public Mat RoiFromBoundingRectangle(out Rectangle boundingRectangle, int padLeft, int padTop, int padRight, int padBottom)
         {
             if (src.IsEmpty)
             {
                 boundingRectangle = Rectangle.Empty;
                 return new Mat();
             }
+
             boundingRectangle = CvInvoke.BoundingRectangle(src);
+
+            if (!boundingRectangle.IsEmpty && (padLeft != 0 || padTop != 0 || padRight != 0 || padBottom != 0))
+            {
+                src.ConstrainRoi(ref boundingRectangle, EmptyRoiBehavior.Default, padLeft, padTop, padRight, padBottom);
+            }
+
             return new Mat(src, boundingRectangle);
+        }
+
+        /// <summary>
+        /// Calculates the bounding rectangle of non-zero pixels and returns the corresponding region of interest.
+        /// </summary>
+        /// <param name="boundingRectangle">The bounding rectangle of non-zero pixels.</param>
+        /// <param name="padding">The amount of padding, in pixels, to apply around the bounding rectangle.</param>
+        /// <returns>A new matrix representing the bounding rectangle region.</returns>
+        public Mat RoiFromBoundingRectangle(out Rectangle boundingRectangle, int padding = 0)
+        {
+            return src.RoiFromBoundingRectangle(out boundingRectangle, padding, padding, padding, padding);
+        }
+
+        /// <summary>
+        /// Calculates the bounding rectangle of non-zero pixels and returns the corresponding region of interest.
+        /// </summary>
+        /// <param name="boundingRectangle">The bounding rectangle of non-zero pixels.</param>
+        /// <param name="padding">The amount of padding, in pixels, to apply around the bounding rectangle.</param>
+        /// <returns>A new matrix representing the bounding rectangle region.</returns>
+        public Mat RoiFromBoundingRectangle(out Rectangle boundingRectangle, Size padding)
+        {
+            return src.RoiFromBoundingRectangle(out boundingRectangle, padding.Width, padding.Height, padding.Width, padding.Height);
         }
 
         /// <summary>
@@ -1112,137 +1242,58 @@ public static partial class EmguCvExtensions
         /// <returns>A new matrix representing the centered region of interest.</returns>
         public Mat RoiFromCenter(Size size)
         {
-            if (src.Size == size) return src.Roi(size);
+            if (src.IsEmpty || size.IsEmpty) return new Mat();
+            if (src.Size == size) return new Mat(src, new Rectangle(Point.Empty, size));
 
-            return src.SafeRoi(new Rectangle(
+            var roi = new Rectangle(
                 src.Width / 2 - size.Width / 2,
                 src.Height / 2 - size.Height / 2,
                 size.Width,
                 size.Height
-            ));
-        }
+            );
 
-        /// <summary>
-        /// Returns a region of interest (ROI) from the source matrix, expanding the specified rectangle by the given
-        /// padding values while ensuring the resulting ROI remains within the matrix bounds.
-        /// </summary>
-        /// <remarks>If the requested padding would cause the ROI to exceed the matrix boundaries, the ROI
-        /// is automatically clipped to fit within the source matrix. This method does not modify the original
-        /// matrix.</remarks>
-        /// <param name="roi">The rectangle that defines the initial region of interest within the source matrix. The rectangle is
-        /// adjusted by the specified padding values.</param>
-        /// <param name="outRoi">Returns the sanitized roi rectangle</param>
-        /// <param name="padLeft">The number of pixels to add to the left side of the ROI. Must be zero or positive.</param>
-        /// <param name="padTop">The number of pixels to add to the top side of the ROI. Must be zero or positive.</param>
-        /// <param name="padRight">The number of pixels to add to the right side of the ROI. Must be zero or positive.</param>
-        /// <param name="padBottom">The number of pixels to add to the bottom side of the ROI. Must be zero or positive.</param>
-        /// <returns>A Mat object representing the adjusted region of interest, guaranteed to be within the bounds of the source
-        /// matrix.</returns>
-        public Mat SafeRoi(Rectangle roi, out Rectangle outRoi, int padLeft = 0, int padTop = 0, int padRight = 0,
-            int padBottom = 0)
-        {
-            int x = Math.Max(0, roi.X - padLeft);
-            int y = Math.Max(0, roi.Y - padTop);
-            int right = Math.Min(src.Width, roi.Right + padRight);
-            int bottom = Math.Min(src.Height, roi.Bottom + padBottom);
-            int width = right - x;
-            int height = bottom - y;
-            if (width <= 0 || height <= 0)
-            {
-                outRoi = Rectangle.Empty;
-                return new Mat();
-            }
-            outRoi = new Rectangle(x, y, width, height);
-            return new Mat(src, outRoi);
-        }
-
-        /// <summary>
-        /// Returns a region of interest (ROI) from the source matrix, expanding the specified rectangle by the given
-        /// padding values while ensuring the resulting ROI remains within the matrix bounds.
-        /// </summary>
-        /// <remarks>If the requested padding would cause the ROI to exceed the matrix boundaries, the ROI
-        /// is automatically clipped to fit within the source matrix. This method does not modify the original
-        /// matrix.</remarks>
-        /// <param name="roi">The rectangle that defines the initial region of interest within the source matrix. The rectangle is
-        /// adjusted by the specified padding values.</param>
-        /// <param name="padLeft">The number of pixels to add to the left side of the ROI. Must be zero or positive.</param>
-        /// <param name="padTop">The number of pixels to add to the top side of the ROI. Must be zero or positive.</param>
-        /// <param name="padRight">The number of pixels to add to the right side of the ROI. Must be zero or positive.</param>
-        /// <param name="padBottom">The number of pixels to add to the bottom side of the ROI. Must be zero or positive.</param>
-        /// <returns>A Mat object representing the adjusted region of interest, guaranteed to be within the bounds of the source
-        /// matrix.</returns>
-        public Mat SafeRoi(Rectangle roi, int padLeft = 0, int padTop = 0, int padRight = 0, int padBottom = 0)
-        {
-            return src.SafeRoi(roi, out _, padLeft, padTop, padRight, padBottom);
+            return src.SafeRoi(ref roi);
         }
 
         /// <summary>
         /// Calculates a safe region of interest (ROI) within the current matrix, applying the specified padding to
         /// ensure the ROI remains within the matrix boundaries.
         /// </summary>
-        /// <remarks>If the requested ROI plus padding would exceed the matrix boundaries, the ROI is
-        /// automatically adjusted to fit within the valid area. This method does not modify the original
-        /// matrix.</remarks>
-        /// <param name="roi">The rectangle that defines the initial region of interest to be adjusted.</param>
-        /// <param name="outRoi">When this method returns, contains the adjusted rectangle representing the safe ROI after applying the
-        /// specified padding.</param>
-        /// <param name="padding">The amount of padding to apply to each edge of the region of interest, specified as a Size structure. The
-        /// Width and Height represent the horizontal and vertical padding, respectively.</param>
-        /// <returns>A Mat object representing the region of interest adjusted to fit safely within the matrix after applying the
-        /// specified padding.</returns>
-        public Mat SafeRoi(Rectangle roi, out Rectangle outRoi, Size padding)
+        /// <param name="roi">The rectangle that defines the initial region of interest. This parameter is passed by reference and will be updated to reflect the adjusted ROI.</param>
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the resulting ROI is empty.</param>
+        /// <param name="padLeft">The number of pixels to add to the left side of the ROI.</param>
+        /// <param name="padTop">The number of pixels to add to the top side of the ROI.</param>
+        /// <param name="padRight">The number of pixels to add to the right side of the ROI.</param>
+        /// <param name="padBottom">The number of pixels to add to the bottom side of the ROI.</param>
+        /// <returns>A Mat object representing the adjusted region of interest, guaranteed to be within the bounds of the source matrix.</returns>
+        public Mat SafeRoi(ref Rectangle roi, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default, int padLeft = 0, int padTop = 0, int padRight = 0, int padBottom = 0)
         {
-            return src.SafeRoi(roi, out outRoi, padding.Width, padding.Height, padding.Width, padding.Height);
+            src.ConstrainRoi(ref roi, emptyRoiBehavior, padLeft, padTop, padRight, padBottom);
+            return new Mat(src, roi);
         }
 
         /// <summary>
-        /// Returns a new Mat that represents a region of interest (ROI) within the current Mat, expanded by the
-        /// specified padding.
+        /// Returns a new Mat that represents a region of interest (ROI) within the current Mat, expanded by the specified padding.
         /// </summary>
-        /// <remarks>If the requested ROI and padding extend beyond the boundaries of the original Mat,
-        /// the resulting region will be clipped to fit within the source Mat.</remarks>
-        /// <param name="roi">A Rectangle that defines the region of interest to extract from the current Mat.</param>
-        /// <param name="padding">A Size specifying the amount of horizontal and vertical padding to add to the ROI. The width and height of
-        /// the padding are applied to the respective sides of the ROI.</param>
-        /// <returns>A Mat containing the region of interest, including the specified padding. The returned Mat will not exceed
-        /// the bounds of the original Mat.</returns>
-        public Mat SafeRoi(Rectangle roi, Size padding)
+        /// <param name="roi">The rectangle that defines the initial region of interest. This parameter is passed by reference and will be updated to reflect the adjusted ROI.</param>
+        /// <param name="padding">A Size structure specifying the amount of padding to add to each side of the ROI. The Width and Height represent the horizontal and vertical padding, respectively.</param>
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the resulting ROI is empty.</param>
+        /// <returns>A Mat object representing the adjusted region of interest, including the specified padding.</returns>
+        public Mat SafeRoi(ref Rectangle roi, Size padding, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
         {
-            return src.SafeRoi(roi, out _, padding.Width, padding.Height, padding.Width, padding.Height);
+            return src.SafeRoi(ref roi, emptyRoiBehavior, padding.Width, padding.Height, padding.Width, padding.Height);
         }
 
         /// <summary>
-        /// Calculates a safe region of interest (ROI) within the current matrix, applying the specified padding to
-        /// ensure the ROI remains within the matrix boundaries.
+        /// Returns a new Mat that represents a region of interest (ROI) within the current Mat, expanded by the specified padding.
         /// </summary>
-        /// <remarks>If the requested ROI plus padding would exceed the matrix boundaries, the ROI is
-        /// automatically adjusted to fit within the valid area. This method does not modify the original
-        /// matrix.</remarks>
-        /// <param name="roi">The rectangle that defines the initial region of interest to be adjusted.</param>
-        /// <param name="outRoi">When this method returns, contains the adjusted rectangle representing the safe ROI after applying the
-        /// specified padding.</param>
-        /// <param name="padding">The amount of padding to apply to each edge of the region of interest, specified as an integer. The
-        /// same value is applied to all sides of the ROI.</param>
-        /// <returns>A Mat object representing the region of interest adjusted to fit safely within the matrix after applying the
-        /// specified padding.</returns>
-        public Mat SafeRoi(Rectangle roi, out Rectangle outRoi, int padding)
-        {
-            return src.SafeRoi(roi, out outRoi, padding, padding, padding, padding);
-        }
-
-        /// <summary>
-        /// Returns a new Mat that represents a region of interest (ROI) within the current Mat, expanded by the
-        /// specified padding.
-        /// </summary>
-        /// <remarks>If the requested ROI and padding extend beyond the boundaries of the original Mat,
-        /// the resulting region will be clipped to fit within the source Mat.</remarks>
-        /// <param name="roi">A Rectangle that defines the region of interest to extract from the current Mat.</param>
+        /// <param name="roi">The rectangle that defines the initial region of interest. This parameter is passed by reference and will be updated to reflect the adjusted ROI.</param>
         /// <param name="padding">An integer specifying the amount of padding to add to each side of the ROI.</param>
-        /// <returns>A Mat containing the region of interest, including the specified padding. The returned Mat will not exceed
-        /// the bounds of the original Mat.</returns>
-        public Mat SafeRoi(Rectangle roi, int padding)
+        /// <param name="emptyRoiBehavior">Specifies the behavior when the resulting ROI is empty.</param>
+        /// <returns>A Mat object representing the adjusted region of interest, including the specified padding.</returns>
+        public Mat SafeRoi(ref Rectangle roi, int padding, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
         {
-            return src.SafeRoi(roi, out _, padding, padding, padding, padding);
+            return src.SafeRoi(ref roi, emptyRoiBehavior, padding, padding, padding, padding);
         }
         #endregion
 
@@ -2050,77 +2101,6 @@ public static partial class EmguCvExtensions
         }
 
         /// <summary>
-        /// Crops the matrix to the bounding rectangle of its non-zero pixels.
-        /// </summary>
-        /// <param name="cloneInsteadRoi">If <see langword="true"/>, returns a cloned matrix; otherwise returns a ROI that shares memory with the source.</param>
-        /// <returns>A new matrix cropped to the bounding rectangle of non-zero content.</returns>
-        public Mat CropByBounds(bool cloneInsteadRoi = false)
-        {
-            var rect = CvInvoke.BoundingRectangle(src);
-            if (rect.Size == Size.Empty) return new Mat();
-            if (src.Size == rect.Size) return cloneInsteadRoi ? src.Clone() : src.Roi(src.Size);
-            var roi = src.Roi(rect);
-
-            if (cloneInsteadRoi)
-            {
-                var clone = roi.Clone();
-                roi.Dispose();
-                return clone;
-            }
-
-            return roi;
-        }
-
-        /// <summary>
-        /// Crops the matrix to its bounding rectangle with a uniform margin added around the content.
-        /// </summary>
-        /// <param name="margin">The margin in pixels to add on all sides.</param>
-        /// <returns>A new matrix cropped and padded with the specified margin.</returns>
-        public Mat CropByBounds(int margin)
-        {
-            ArgumentOutOfRangeException.ThrowIfNegative(margin);
-
-            return src.CropByBounds(new Size(margin, margin));
-        }
-
-        /// <summary>
-        /// Crops the matrix to its bounding rectangle with the specified horizontal and vertical margins.
-        /// </summary>
-        /// <param name="margin">The margin size where Width is horizontal padding and Height is vertical padding.</param>
-        /// <returns>A new matrix cropped and padded with the specified margins.</returns>
-        public Mat CropByBounds(Size margin)
-        {
-            if (margin.Width < 0 || margin.Height < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(margin), margin,
-                    "Margin width and height must be non-negative.");
-            }
-
-            var rect = CvInvoke.BoundingRectangle(src);
-            if (rect.Size == Size.Empty) return new Mat();
-            using var roi = src.Size == rect.Size ? src.Roi(src.Size) : src.Roi(rect);
-
-            var numberOfChannels = roi.NumberOfChannels;
-            var cropped = InitMat(new Size(roi.Width + margin.Width * 2, roi.Height + margin.Height * 2), numberOfChannels, roi.Depth);
-
-            using var dest = new Mat(cropped, new Rectangle(margin.Width, margin.Height, roi.Width, roi.Height));
-            roi.CopyTo(dest);
-
-            return cropped;
-        }
-
-        /// <summary>
-        /// Crops the matrix to its bounding rectangle and copies the result into the destination matrix.
-        /// </summary>
-        /// <param name="dst">The destination matrix, which is resized to fit the cropped result.</param>
-        public void CropByBounds(Mat dst)
-        {
-            using var mat = src.CropByBounds();
-            dst.Create(mat.Rows, mat.Cols, mat.Depth, mat.NumberOfChannels);
-            mat.CopyTo(dst);
-        }
-
-        /// <summary>
         /// Copies areas smaller than the specified threshold from the source to the destination image.
         /// </summary>
         /// <param name="threshold">Maximum area size in pixels. Areas smaller than this value will be copied.</param>
@@ -2361,7 +2341,7 @@ public static partial class EmguCvExtensions
 
             // Copy resized image to center of letterboxed image
             var roi = new Rectangle(padX, padY, newWidth, newHeight);
-            using var roiMat = letterboxed.SafeRoi(roi);
+            using var roiMat = letterboxed.SafeRoi(ref roi);
             resized.CopyTo(roiMat);
 
             return letterboxed;

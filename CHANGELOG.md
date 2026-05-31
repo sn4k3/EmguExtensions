@@ -1,3 +1,13 @@
+# v0.1.6 (31/05/2026)
+- Add `EmptyRoiBehavior` enum and refactor ROI-related APIs to use ref Rectangle and explicit empty-ROI semantics. 
+- Add `ConstrainRoi` and `SanitizeRoiWithBehavior` helpers
+- Add new SafeRoi overloads (ref-based, padding and behavior options), additional Roi/RoiFromBoundingRectangle overloads with padding, and RoiFromCenter adjustments. 
+- Rename `PutTextLineAlignment.None` to `Default` and add descriptions. 
+- Update `MatRoi` to use the new SafeRoi semantics. 
+- Update span/stream usages to ReadOnlySpan helpers 
+- Remove old async CopyToAsync/CropByBounds implementations.
+- Tests updated to cover ConstrainRoi and to use ref SafeRoi. 
+
 # v0.1.5 (30/05/2026)
 - Improve the `MatCompressor` schemantic by favor int compressionLevel instead of enum
 

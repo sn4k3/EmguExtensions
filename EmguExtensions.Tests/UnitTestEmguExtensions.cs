@@ -612,6 +612,94 @@ public class UnitTestEmguExtensions
 
     #endregion
 
+    #region ConstrainRoi
+
+    [Fact]
+    public void ConstrainRoi_EmptyMatWithDefaultBehavior_ConvertsRoiToEmpty()
+    {
+        using var mat = new Mat();
+        var roi = new Rectangle(0, 0, 10, 10);
+
+        var changed = mat.ConstrainRoi(ref roi);
+
+        Assert.True(changed);
+        Assert.Equal(Rectangle.Empty, roi);
+    }
+
+    [Fact]
+    public void ConstrainRoi_EmptyMatWithCaptureSource_ConvertsRoiToEmpty()
+    {
+        using var mat = new Mat();
+        var roi = new Rectangle(0, 0, 10, 10);
+
+        var changed = mat.ConstrainRoi(ref roi, EmptyRoiBehavior.CaptureSource);
+
+        Assert.True(changed);
+        Assert.Equal(Rectangle.Empty, roi);
+    }
+
+    [Fact]
+    public void ConstrainRoi_EmptyMatWithThrowException_Throws()
+    {
+        using var mat = new Mat();
+        var roi = new Rectangle(0, 0, 10, 10);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            mat.ConstrainRoi(ref roi, EmptyRoiBehavior.ThrowException));
+
+        Assert.Equal(new Rectangle(0, 0, 10, 10), roi);
+    }
+
+    [Fact]
+    public void ConstrainRoi_EmptyRectangleWithDefaultBehavior_LeavesRoiEmpty()
+    {
+        using var mat = CreateSolidMat(100, 80);
+        var roi = Rectangle.Empty;
+
+        var changed = mat.ConstrainRoi(ref roi);
+
+        Assert.False(changed);
+        Assert.Equal(Rectangle.Empty, roi);
+    }
+
+    [Fact]
+    public void ConstrainRoi_EmptyRectangleWithCaptureSource_UsesFullSource()
+    {
+        using var mat = CreateSolidMat(100, 80);
+        var roi = Rectangle.Empty;
+
+        var changed = mat.ConstrainRoi(ref roi, EmptyRoiBehavior.CaptureSource);
+
+        Assert.True(changed);
+        Assert.Equal(new Rectangle(0, 0, mat.Width, mat.Height), roi);
+    }
+
+    [Fact]
+    public void ConstrainRoi_RectangleMarginWithCaptureSource_UsesFullSource()
+    {
+        using var mat = CreateSolidMat(100, 80);
+        var roi = new Rectangle(25, 25, 25, 25);
+
+        var changed = mat.ConstrainRoi(ref roi, EmptyRoiBehavior.CaptureSource, 10, 0, 200, 0);
+
+        Assert.True(changed);
+        Assert.Equal(new Rectangle(15, 25, mat.Width-15, 25), roi);
+    }
+
+    [Fact]
+    public void ConstrainRoi_EmptyRectangleWithThrowException_Throws()
+    {
+        using var mat = CreateSolidMat(100, 80);
+        var roi = Rectangle.Empty;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            mat.ConstrainRoi(ref roi, EmptyRoiBehavior.ThrowException));
+
+        Assert.Equal(Rectangle.Empty, roi);
+    }
+
+    #endregion
+
     #region SafeRoi
 
     [Fact]
@@ -619,11 +707,12 @@ public class UnitTestEmguExtensions
     {
         using var mat = CreateSolidMat(100, 80);
         var roi = new Rectangle(10, 10, 30, 20);
+        var originalRoi = roi;
 
-        using var result = mat.SafeRoi(roi, out var outRoi);
+        using var result = mat.SafeRoi(ref roi);
 
-        Assert.Equal(roi, outRoi);
-        Assert.Equal(roi.Size, result.Size);
+        Assert.Equal(originalRoi, roi);
+        Assert.Equal(originalRoi.Size, result.Size);
     }
 
     [Fact]
@@ -631,16 +720,19 @@ public class UnitTestEmguExtensions
     {
         using var mat = CreateSolidMat(100, 80);
         // Right=120, Bottom=100 — both exceed bounds
-        using var result = mat.SafeRoi(new Rectangle(80, 60, 40, 40), out var outRoi);
-        Assert.Equal(new Rectangle(80, 60, 20, 20), outRoi);
+        var roi = new Rectangle(80, 60, 40, 40);
+        using var result = mat.SafeRoi(ref roi);
+        Assert.Equal(new Rectangle(80, 60, 20, 20), roi);
+        Assert.Equal(new Size(20, 20), result.Size);
     }
 
     [Fact]
     public void SafeRoi_RoiCompletelyOutside_ReturnsEmptyMatAndEmptyRectangle()
     {
         using var mat = CreateSolidMat(100, 80);
-        using var result = mat.SafeRoi(new Rectangle(200, 200, 10, 10), out var outRoi);
-        Assert.Equal(Rectangle.Empty, outRoi);
+        var roi = new Rectangle(200, 200, 10, 10);
+        using var result = mat.SafeRoi(ref roi);
+        Assert.Equal(Rectangle.Empty, roi);
         Assert.True(result.IsEmpty);
     }
 
@@ -649,8 +741,9 @@ public class UnitTestEmguExtensions
     {
         using var mat = CreateSolidMat(100, 80);
         var inner = new Rectangle(20, 20, 30, 20);
-        using var result = mat.SafeRoi(inner, out var outRoi, padLeft: 5, padTop: 5, padRight: 5, padBottom: 5);
-        Assert.Equal(new Rectangle(15, 15, 40, 30), outRoi);
+        using var result = mat.SafeRoi(ref inner, padLeft: 5, padTop: 5, padRight: 5, padBottom: 5);
+        Assert.Equal(new Rectangle(15, 15, 40, 30), inner);
+        Assert.Equal(new Size(40, 30), result.Size);
     }
 
     #endregion
