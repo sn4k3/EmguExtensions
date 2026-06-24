@@ -39,13 +39,15 @@ public class UnitTestEmguExtensions
 
     // Returns a non-continuous submatrix view by narrowing the column count.
     private static Mat CreateNonContinuousMat(Mat src)
-        => new(src, new Rectangle(0, 0, src.Width / 2, src.Height));
+    {
+        return new Mat(src, new Rectangle(0, 0, src.Width / 2, src.Height));
+    }
 
     #region DepthType.ByteCount
 
     [Theory]
-    [InlineData(DepthType.Cv8U,  1)]
-    [InlineData(DepthType.Cv8S,  1)]
+    [InlineData(DepthType.Cv8U, 1)]
+    [InlineData(DepthType.Cv8S, 1)]
     [InlineData(DepthType.Cv16U, 2)]
     [InlineData(DepthType.Cv16S, 2)]
     [InlineData(DepthType.Cv32S, 4)]
@@ -147,9 +149,9 @@ public class UnitTestEmguExtensions
 
     [Theory]
     [InlineData(CompressionLevel.NoCompression, 0)]
-    [InlineData(CompressionLevel.Fastest,        1)]
-    [InlineData(CompressionLevel.Optimal,        3)]
-    [InlineData(CompressionLevel.SmallestSize,   9)]
+    [InlineData(CompressionLevel.Fastest, 1)]
+    [InlineData(CompressionLevel.Optimal, 3)]
+    [InlineData(CompressionLevel.SmallestSize, 9)]
     public void GetPngBytes_CompressionLevelEnum_ProducesValidPng(CompressionLevel level, int _)
     {
         using var mat = CreateGradientMat();
@@ -162,10 +164,56 @@ public class UnitTestEmguExtensions
     public void GetPngBytes_HigherCompressionProducesSmallerOrEqualOutput()
     {
         using var mat = CreateGradientMat();
-        var noComp     = mat.GetPngBytes(0);
-        var maxComp    = mat.GetPngBytes(9);
+        var noComp = mat.GetPngBytes(0);
+        var maxComp = mat.GetPngBytes(9);
         Assert.True(maxComp.Length <= noComp.Length,
             $"Level-9 ({maxComp.Length}) should be ≤ level-0 ({noComp.Length})");
+    }
+
+    #endregion
+
+    #region CopyTo(Stream) / CopyToAsync(Stream)
+
+    [Fact]
+    public async Task CopyToAsync_ContinuousMat_MatchesSynchronousCopy()
+    {
+        using var mat = CreateGradientMat(32, 24);
+        using var syncStream = new MemoryStream();
+        using var asyncStream = new MemoryStream();
+
+        mat.CopyTo(syncStream);
+        await mat.CopyToAsync(asyncStream, TestContext.Current.CancellationToken);
+
+        Assert.Equal(syncStream.ToArray(), asyncStream.ToArray());
+    }
+
+    [Fact]
+    public async Task CopyToAsync_NonContinuousMat_MatchesSynchronousCopy()
+    {
+        using var source = CreateGradientMat(32, 24);
+        using var mat = CreateNonContinuousMat(source);
+        using var syncStream = new MemoryStream();
+        using var asyncStream = new MemoryStream();
+
+        Assert.False(mat.IsContinuous);
+
+        mat.CopyTo(syncStream);
+        await mat.CopyToAsync(asyncStream, TestContext.Current.CancellationToken);
+
+        Assert.Equal(syncStream.ToArray(), asyncStream.ToArray());
+        Assert.Equal(mat.Height * mat.Width, asyncStream.Length);
+    }
+
+    [Fact]
+    public async Task CopyToAsync_CanceledToken_ThrowsOperationCanceledException()
+    {
+        using var mat = CreateGradientMat(32, 24);
+        using var stream = new MemoryStream();
+        using var cancellationTokenSource = new CancellationTokenSource();
+        await cancellationTokenSource.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await mat.CopyToAsync(stream, cancellationTokenSource.Token));
     }
 
     #endregion
@@ -299,7 +347,7 @@ public class UnitTestEmguExtensions
     public void GetSpan_WithOffset_SkipsCorrectNumberOfElements()
     {
         using var mat = CreateSolidMat(10, 10, 255);
-        var span = mat.GetSpan<byte>(length: 0, offset: 10); // skip first 10 bytes
+        var span = mat.GetSpan<byte>(0, 10); // skip first 10 bytes
         Assert.Equal(90, span.Length);
         Assert.All(span.ToArray(), b => Assert.Equal(255, b));
     }
@@ -317,7 +365,7 @@ public class UnitTestEmguExtensions
         using var mat = CreateSolidMat(10, 10);
         // Named params are required to resolve to our C# 14 extension rather than
         // Emgu.CV's class member GetSpan<T>(int size) (which has a different param name).
-        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetSpan<byte>(length: 200, offset: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetSpan<byte>(200, 0));
     }
 
     [Fact]
@@ -346,7 +394,7 @@ public class UnitTestEmguExtensions
     {
         using var mat = CreateGradientMat(10, 10); // rows 0-4 black, 5-9 white
         var span = mat.GetSpan2D<byte>();
-        Assert.Equal(0, span[0, 0]);   // top-left black
+        Assert.Equal(0, span[0, 0]); // top-left black
         Assert.Equal(255, span[9, 0]); // bottom-left white
     }
 
@@ -390,7 +438,7 @@ public class UnitTestEmguExtensions
         using var mat = CreateGradientMat(100, 80); // rows 0-39 black, 40-79 white
         var whiteRoi = new Rectangle(0, 40, 100, 40);
         var span = mat.GetSpan2D<byte>(whiteRoi);
-        for (int r = 0; r < span.Height; r++)
+        for (var r = 0; r < span.Height; r++)
             Assert.All(span.GetRowSpan(r).ToArray(), b => Assert.Equal(255, b));
     }
 
@@ -402,7 +450,7 @@ public class UnitTestEmguExtensions
     public void GetRowSpan_Row0_ReturnsFirstRowData()
     {
         using var mat = CreateGradientMat(10, 10); // row 0 = black
-        var span = mat.GetRowSpan<byte>(y: 0);
+        var span = mat.GetRowSpan<byte>(0);
         Assert.Equal(10, span.Length);
         Assert.All(span.ToArray(), b => Assert.Equal(0, b));
     }
@@ -411,7 +459,7 @@ public class UnitTestEmguExtensions
     public void GetRowSpan_LastRow_ReturnsLastRowData()
     {
         using var mat = CreateGradientMat(10, 10); // row 9 = white
-        var span = mat.GetRowSpan<byte>(y: 9);
+        var span = mat.GetRowSpan<byte>(9);
         Assert.All(span.ToArray(), b => Assert.Equal(255, b));
     }
 
@@ -438,6 +486,290 @@ public class UnitTestEmguExtensions
 
     #endregion
 
+    #region GetMemory<T>
+
+    [Fact]
+    public void GetMemory_DefaultParams_ReturnsFullData()
+    {
+        using var mat = CreateSolidMat(10, 10, 42);
+        var memory = mat.GetMemory<byte>();
+        Assert.Equal(100, memory.Length);
+        Assert.All(memory.ToArray(), b => Assert.Equal(42, b));
+    }
+
+    [Fact]
+    public void GetMemory_WithOffset_SkipsCorrectNumberOfElements()
+    {
+        using var mat = CreateSolidMat(10, 10, 255);
+        var memory = mat.GetMemory<byte>(0, 10); // skip first 10 bytes
+        Assert.Equal(90, memory.Length);
+        Assert.All(memory.ToArray(), b => Assert.Equal(255, b));
+    }
+
+    [Fact]
+    public void GetMemory_Span_WritesThroughToMat()
+    {
+        using var mat = CreateSolidMat(10, 10, 0);
+        var memory = mat.GetMemory<byte>();
+        memory.Span[55] = 123;
+        Assert.Equal(123, mat.GetByte(55));
+    }
+
+    [Fact]
+    public void GetMemory_Pin_PointsAtMatData()
+    {
+        using var mat = CreateSolidMat(10, 10, 0);
+        var memory = mat.GetMemory<byte>();
+        using var handle = memory.Pin();
+        unsafe
+        {
+            ((byte*)handle.Pointer)[7] = 200;
+        }
+
+        Assert.Equal(200, mat.GetByte(7));
+    }
+
+    [Fact]
+    public void GetMemory_NegativeOffset_ThrowsArgumentOutOfRangeException()
+    {
+        using var mat = CreateSolidMat(10, 10);
+        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetMemory<byte>(0, -1));
+    }
+
+    [Fact]
+    public void GetMemory_LengthExceedsBounds_ThrowsArgumentOutOfRangeException()
+    {
+        using var mat = CreateSolidMat(10, 10);
+        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetMemory<byte>(200, 0));
+    }
+
+    [Fact]
+    public void GetMemory_NonContinuousMat_ThrowsNotSupportedException()
+    {
+        using var src = CreateSolidMat(20, 10, 0);
+        using var nonContinuous = CreateNonContinuousMat(src);
+        Assert.Throws<NotSupportedException>(() => nonContinuous.GetMemory<byte>());
+    }
+
+    [Fact]
+    public void GetMemoryOfBytes_ReturnsSameAsGenericByte()
+    {
+        using var mat = CreateSolidMat(10, 10, 7);
+        Assert.Equal(mat.GetMemory<byte>().Length, mat.GetMemoryOfBytes().Length);
+    }
+
+    [Fact]
+    public void GetReadOnlyMemory_DefaultParams_ReturnsFullData()
+    {
+        using var mat = CreateSolidMat(10, 10, 99);
+        var memory = mat.GetReadOnlyMemory<byte>();
+        Assert.Equal(100, memory.Length);
+        Assert.All(memory.ToArray(), b => Assert.Equal(99, b));
+    }
+
+    [Fact]
+    public void GetReadOnlyMemoryOfBytes_ReturnsFullData()
+    {
+        using var mat = CreateSolidMat(10, 10, 5);
+        Assert.Equal(100, mat.GetReadOnlyMemoryOfBytes().Length);
+    }
+
+    #endregion
+
+    #region GetMemory2D<T>
+
+    [Fact]
+    public void GetMemory2D_ContinuousMat_DimensionsMatchMat()
+    {
+        using var mat = CreateSolidMat(30, 20, 128);
+        var memory = mat.GetMemory2D<byte>();
+        Assert.Equal(20, memory.Height);
+        Assert.Equal(30, memory.Width);
+    }
+
+    [Fact]
+    public void GetMemory2D_ContinuousMat_PixelValuesCorrect()
+    {
+        using var mat = CreateGradientMat(10, 10); // rows 0-4 black, 5-9 white
+        var span = mat.GetMemory2D<byte>().Span;
+        Assert.Equal(0, span[0, 0]); // top-left black
+        Assert.Equal(255, span[9, 0]); // bottom-left white
+    }
+
+    [Fact]
+    public void GetMemory2D_NonContinuousMat_DimensionsAndValuesCorrect()
+    {
+        using var src = CreateGradientMat(100, 80); // rows 0-39 black, 40-79 white
+        using var nonContinuous = CreateNonContinuousMat(src); // 50 wide, 80 tall, pitched rows
+        Assert.False(nonContinuous.IsContinuous);
+
+        var memory = nonContinuous.GetMemory2D<byte>();
+        Assert.Equal(80, memory.Height);
+        Assert.Equal(50, memory.Width);
+
+        var span = memory.Span;
+        Assert.Equal(0, span[0, 0]); // black row
+        Assert.Equal(0, span[39, 49]); // black row, last column of ROI
+        Assert.Equal(255, span[40, 0]); // white row
+        Assert.Equal(255, span[79, 49]); // white row, last pixel
+    }
+
+    [Fact]
+    public void GetMemory2D_Span_WritesThroughToMat()
+    {
+        using var mat = CreateSolidMat(10, 10, 0);
+        mat.GetMemory2D<byte>().Span[3, 4] = 222;
+        Assert.Equal(222, mat.GetByte(4, 3)); // GetByte(x, y)
+    }
+
+    [Fact]
+    public void GetMemory2D_WithRoi_DimensionsMatchRoi()
+    {
+        using var mat = CreateSolidMat(100, 80);
+        var roi = new Rectangle(10, 5, 40, 20);
+        var memory = mat.GetMemory2D<byte>(roi);
+        Assert.Equal(20, memory.Height);
+        Assert.Equal(40, memory.Width);
+    }
+
+    [Fact]
+    public void GetMemory2D_WithRoi_EmptyRectangle_ReturnsEmptyMemory()
+    {
+        using var mat = CreateSolidMat(100, 80);
+        var memory = mat.GetMemory2D<byte>(Rectangle.Empty);
+        Assert.True(memory.IsEmpty);
+    }
+
+    [Fact]
+    public void GetMemory2D_WithRoi_RoiExceedsRight_ThrowsArgumentOutOfRangeException()
+    {
+        using var mat = CreateSolidMat(100, 80);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            mat.GetMemory2D<byte>(new Rectangle(90, 0, 20, 10))); // right = 110 > 100
+    }
+
+    [Fact]
+    public void GetMemory2D_WithRoi_NegativeX_ThrowsArgumentOutOfRangeException()
+    {
+        using var mat = CreateSolidMat(100, 80);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            mat.GetMemory2D<byte>(new Rectangle(-1, 0, 10, 10)));
+    }
+
+    [Fact]
+    public void GetMemory2D_WithRoi_PixelValuesMatchSource()
+    {
+        using var mat = CreateGradientMat(100, 80); // rows 0-39 black, 40-79 white
+        var whiteRoi = new Rectangle(0, 40, 100, 40);
+        var span = mat.GetMemory2D<byte>(whiteRoi).Span;
+        for (var r = 0; r < span.Height; r++)
+            Assert.All(span.GetRowSpan(r).ToArray(), b => Assert.Equal(255, b));
+    }
+
+    [Fact]
+    public void GetReadOnlyMemory2D_ContinuousMat_PixelValuesCorrect()
+    {
+        using var mat = CreateGradientMat(10, 10);
+        var span = mat.GetReadOnlyMemory2D<byte>().Span;
+        Assert.Equal(0, span[0, 0]);
+        Assert.Equal(255, span[9, 0]);
+    }
+
+    [Fact]
+    public void GetReadOnlyMemory2D_WithRoi_PixelValuesMatchSource()
+    {
+        using var mat = CreateGradientMat(100, 80);
+        var span = mat.GetReadOnlyMemory2D<byte>(new Rectangle(0, 40, 100, 40)).Span;
+        for (var r = 0; r < span.Height; r++)
+            Assert.All(span.GetRowSpan(r).ToArray(), b => Assert.Equal(255, b));
+    }
+
+    [Fact]
+    public void GetMemory2DOfBytes_DimensionsMatchMat()
+    {
+        using var mat = CreateSolidMat(30, 20, 0);
+        var memory = mat.GetMemory2DOfBytes();
+        Assert.Equal(20, memory.Height);
+        Assert.Equal(30, memory.Width);
+    }
+
+    #endregion
+
+    #region GetRowMemory<T>
+
+    [Fact]
+    public void GetRowMemory_Row0_ReturnsFirstRowData()
+    {
+        using var mat = CreateGradientMat(10, 10); // row 0 = black
+        var memory = mat.GetRowMemory<byte>(0);
+        Assert.Equal(10, memory.Length);
+        Assert.All(memory.ToArray(), b => Assert.Equal(0, b));
+    }
+
+    [Fact]
+    public void GetRowMemory_LastRow_ReturnsLastRowData()
+    {
+        using var mat = CreateGradientMat(10, 10); // row 9 = white
+        var memory = mat.GetRowMemory<byte>(9);
+        Assert.All(memory.ToArray(), b => Assert.Equal(255, b));
+    }
+
+    [Fact]
+    public void GetRowMemory_NonContinuousMat_ReturnsCorrectRow()
+    {
+        using var src = CreateGradientMat(100, 80);
+        using var nonContinuous = CreateNonContinuousMat(src);
+        var memory = nonContinuous.GetRowMemory<byte>(79); // white row
+        Assert.Equal(50, memory.Length);
+        Assert.All(memory.ToArray(), b => Assert.Equal(255, b));
+    }
+
+    [Fact]
+    public void GetRowMemory_Span_WritesThroughToMat()
+    {
+        using var mat = CreateSolidMat(10, 10, 0);
+        mat.GetRowMemory<byte>(2).Span[3] = 88;
+        Assert.Equal(88, mat.GetByte(3, 2)); // GetByte(x, y)
+    }
+
+    [Fact]
+    public void GetRowMemory_NegativeOffset_ThrowsArgumentOutOfRangeException()
+    {
+        using var mat = CreateSolidMat(10, 10);
+        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetRowMemory<byte>(0, 0, -1));
+    }
+
+    [Fact]
+    public void GetRowMemory_NegativeRow_ThrowsArgumentOutOfRangeException()
+    {
+        using var mat = CreateSolidMat(10, 10);
+        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetRowMemory<byte>(-1));
+    }
+
+    [Fact]
+    public void GetRowMemory_RowEqualToHeight_ThrowsArgumentOutOfRangeException()
+    {
+        using var mat = CreateSolidMat(10, 10);
+        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetRowMemory<byte>(10));
+    }
+
+    [Fact]
+    public void GetReadOnlyRowMemory_ReturnsRowData()
+    {
+        using var mat = CreateGradientMat(10, 10);
+        var memory = mat.GetReadOnlyRowMemory<byte>(9);
+        Assert.All(memory.ToArray(), b => Assert.Equal(255, b));
+    }
+
+    [Fact]
+    public void GetReadOnlyRowMemoryOfBytes_ReturnsRowData()
+    {
+        using var mat = CreateGradientMat(10, 10);
+        Assert.Equal(10, mat.GetReadOnlyRowMemoryOfBytes(0).Length);
+    }
+
+    #endregion
+
     #region Pixel accessors (GetByte / SetByte)
 
     [Fact]
@@ -452,7 +784,7 @@ public class UnitTestEmguExtensions
     public void GetByte_ByXY_ReturnsCorrectValue()
     {
         using var mat = CreateGradientMat(10, 10); // row 5 onwards = white
-        Assert.Equal(0,   mat.GetByte(0, 0)); // black
+        Assert.Equal(0, mat.GetByte(0, 0)); // black
         Assert.Equal(255, mat.GetByte(0, 5)); // white
     }
 
@@ -573,9 +905,9 @@ public class UnitTestEmguExtensions
     public void GetPixelPos_ByXY_ReturnsCorrectOffset()
     {
         using var mat = CreateSolidMat(100, 80); // RealStep = 100
-        Assert.Equal(0,   mat.GetPixelPos(0, 0));
-        Assert.Equal(100, mat.GetPixelPos(0, 1));  // y=1 → 1*100
-        Assert.Equal(203, mat.GetPixelPos(3, 2));  // y=2, x=3 → 200+3
+        Assert.Equal(0, mat.GetPixelPos(0, 0));
+        Assert.Equal(100, mat.GetPixelPos(0, 1)); // y=1 → 1*100
+        Assert.Equal(203, mat.GetPixelPos(3, 2)); // y=2, x=3 → 200+3
     }
 
     #endregion
@@ -683,7 +1015,7 @@ public class UnitTestEmguExtensions
         var changed = mat.ConstrainRoi(ref roi, EmptyRoiBehavior.CaptureSource, 10, 0, 200, 0);
 
         Assert.True(changed);
-        Assert.Equal(new Rectangle(15, 25, mat.Width-15, 25), roi);
+        Assert.Equal(new Rectangle(15, 25, mat.Width - 15, 25), roi);
     }
 
     [Fact]
@@ -788,7 +1120,7 @@ public class UnitTestEmguExtensions
         using var src = CreateSolidMat(10, 10, 123);
         using var dst = new Mat();
 
-        src.RotateFromCenter(dst, angle: 0);
+        src.RotateFromCenter(dst, 0);
 
         Assert.Equal(src.Size, dst.Size);
         Assert.Equal(src.Depth, dst.Depth);
@@ -802,7 +1134,7 @@ public class UnitTestEmguExtensions
         using var src = CreateSolidMat(10, 10, 123);
         using var dst = new Mat();
 
-        var shrunk = src.ShrinkToFitPreserveAspect(dst, maxWidth: 100, maxHeight: 100);
+        var shrunk = src.ShrinkToFitPreserveAspect(dst, 100, 100);
 
         Assert.False(shrunk);
         Assert.Equal(src.Size, dst.Size);
@@ -816,7 +1148,7 @@ public class UnitTestEmguExtensions
     {
         using var src = CreateSolidMat(100, 50, 123);
 
-        var shrunk = src.ShrinkToFitPreserveAspect(maxWidth: 50, maxHeight: 50);
+        var shrunk = src.ShrinkToFitPreserveAspect(50, 50);
 
         Assert.True(shrunk);
         Assert.Equal(new Size(50, 25), src.Size);
@@ -828,7 +1160,7 @@ public class UnitTestEmguExtensions
         using var src = CreateSolidMat(100, 50, 123);
         using var dst = new Mat();
 
-        var shrunk = src.ShrinkToFitPreserveAspect(dst, maxWidth: 50, maxHeight: 50);
+        var shrunk = src.ShrinkToFitPreserveAspect(dst, 50, 50);
 
         Assert.True(shrunk);
         Assert.Equal(new Size(50, 25), dst.Size);
@@ -844,23 +1176,23 @@ public class UnitTestEmguExtensions
     public void FillSpan_ValueAboveThreshold_FillsRegion()
     {
         using var mat = CreateSolidMat(10, 10, 0);
-        int pos = 0;
-        mat.FillSpan<byte>(ref pos, length: 5, value: 200, valueMinThreshold: 1);
+        var pos = 0;
+        mat.FillSpan<byte>(ref pos, 5, 200, 1);
 
         Assert.Equal(5, pos);
         Assert.Equal(200, mat.GetByte(0));
         Assert.Equal(200, mat.GetByte(4));
-        Assert.Equal(0,   mat.GetByte(5)); // outside the fill
+        Assert.Equal(0, mat.GetByte(5)); // outside the fill
     }
 
     [Fact]
     public void FillSpan_ValueBelowThreshold_SkipsFillButAdvancesPosition()
     {
         using var mat = CreateSolidMat(10, 10, 0);
-        int pos = 0;
-        mat.FillSpan<byte>(ref pos, length: 5, value: 0, valueMinThreshold: 1);
+        var pos = 0;
+        mat.FillSpan<byte>(ref pos, 5, 0, 1);
 
-        Assert.Equal(5, pos);          // position advanced
+        Assert.Equal(5, pos); // position advanced
         Assert.Equal(0, mat.GetByte(0)); // data unchanged
     }
 
@@ -868,8 +1200,8 @@ public class UnitTestEmguExtensions
     public void FillSpan_ZeroLength_NoChangeAndPositionUnchanged()
     {
         using var mat = CreateSolidMat(10, 10, 50);
-        int pos = 3;
-        mat.FillSpan<byte>(ref pos, length: 0, value: 255, valueMinThreshold: 0);
+        var pos = 3;
+        mat.FillSpan<byte>(ref pos, 0, 255, 0);
 
         Assert.Equal(3, pos); // unchanged
     }

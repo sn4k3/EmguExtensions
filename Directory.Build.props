@@ -15,8 +15,8 @@
         <CompanyRDNS>pt.ptrtech</CompanyRDNS>
         <Authors>Tiago Conceição</Authors>
         <Copyright>Copyright 2026-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
-        <Description>A high-performance .NET library that extends Emgu.CV (OpenCV wrapper) with span-based Mat accessors, ROI utilities, pluggable Mat compression (PNG, Deflate, GZip, ZLib, Brotli, Zstd), CMat for memory-efficient compressed image storage, structured contour hierarchy wrappers, and drawing helpers for polygons and multi-line text rendering.</Description>
-        <Version>0.1.6</Version>
+        <Description>A high-performance .NET library that extends Emgu.CV (OpenCV wrapper) with zero-copy Span/Memory Mat accessors, async stream copy helpers, ROI utilities, pluggable Mat compression (PNG, Deflate, GZip, ZLib, Brotli, Zstd), CMat for memory-efficient compressed image storage, structured contour hierarchy wrappers, and drawing helpers for polygons and multi-line text rendering.</Description>
+        <Version>0.1.7</Version>
 
         <!-- Package -->
         <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(MainProductName).ico</ApplicationIcon>
@@ -62,12 +62,12 @@
     <Choose>
         <When Condition="Exists('$(MSBuildProjectDirectory)\README.md')">
             <ItemGroup>
-                <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="" Visible="true" />
+                <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="" Visible="true"/>
             </ItemGroup>
         </When>
         <When Condition="Exists('$(MSBuildThisFileDirectory)README.md')">
             <ItemGroup>
-                <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" Visible="true" />
+                <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" Visible="true"/>
             </ItemGroup>
         </When>
     </Choose>

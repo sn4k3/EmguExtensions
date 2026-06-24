@@ -353,7 +353,8 @@ public static class AvaloniaBitmapExtensions
         {
             if (src.BytesPerPixel != sizeof(uint))
                 throw new NotSupportedException($"GetSpan2D<uint> requires a 32-bit pixel format, but the framebuffer uses {src.Format.BitsPerPixel}-bit pixels.");
-            if (roi.X < 0 || roi.Y < 0 || roi.Right > src.Size.Width || roi.Bottom > src.Size.Height)
+            if (roi.X < 0 || roi.Y < 0 || roi.Width < 0 || roi.Height < 0 || roi.Right > src.Size.Width ||
+                roi.Bottom > src.Size.Height)
                 throw new ArgumentOutOfRangeException(nameof(roi), roi, $"The region of interest (ROI) must be within the bounds of the bitmap (width: {src.Size.Width}, height: {src.Size.Height}).");
 
             var pitch = src.RowBytes / sizeof(uint) - roi.Width;
@@ -379,7 +380,8 @@ public static class AvaloniaBitmapExtensions
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the region of interest (ROI) is out of bounds.</exception>
         public Span2D<byte> GetSpan2DOfBytes(Rectangle roi)
         {
-            if (roi.X < 0 || roi.Y < 0 || roi.Right > src.Size.Width || roi.Bottom > src.Size.Height)
+            if (roi.X < 0 || roi.Y < 0 || roi.Width < 0 || roi.Height < 0 || roi.Right > src.Size.Width ||
+                roi.Bottom > src.Size.Height)
                 throw new ArgumentOutOfRangeException(nameof(roi), roi, $"The region of interest (ROI) must be within the bounds of the bitmap (width: {src.Size.Width}, height: {src.Size.Height}).");
 
             var bytesPerPixel = src.BytesPerPixel;

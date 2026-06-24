@@ -6,17 +6,28 @@
 [![NuGet](https://img.shields.io/nuget/v/EmguExtensions?style=for-the-badge)](https://www.nuget.org/packages/EmguExtensions)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/sn4k3?color=red&style=for-the-badge)](https://github.com/sponsors/sn4k3)
 
-A high-performance .NET library that extends [Emgu.CV](https://www.emgu.com) (OpenCV wrapper) with span-based `Mat` accessors, ROI utilities, pluggable Mat compression, structured contour hierarchies, and drawing helpers.
+A high-performance .NET library that extends [Emgu.CV](https://www.emgu.com) (OpenCV wrapper) with zero-copy `Mat`
+accessors, ROI utilities, async stream copy helpers, pluggable Mat compression, structured contour hierarchies, and
+drawing helpers.
 
 ## Features
 
-- **Span-based Mat access** - Zero-copy `GetSpan<T>`, `GetSpan2D<T>`, and `GetReadOnlySpan2D<T>` accessors for fast pixel manipulation
-- **ROI utilities** - `Roi`, `SafeRoi`, `ConstrainRoi`, and `RoiFromCenter` for bounded region-of-interest cropping with configurable empty-ROI behavior
-- **Image transforms** - Rotate with adjusted bounds, letterbox creation, crop-by-bounds, and shrink-to-fit resizing that reports whether the image changed
-- **Mat compression** - Pluggable compressors (PNG, Deflate, GZip, ZLib, Brotli, Zstd) with `CMat` for memory-efficient compressed image storage. `CMat.Compress` is thread-safe — concurrent calls are serialized automatically
-- **Contour hierarchies** - Structured `EmguContour`, `EmguContours`, and `EmguContourFamily` wrappers for OpenCV contour trees using hierarchy links
-- **Drawing helpers** - Polygon geometry, multi-line text rendering with alignment, SVG path generation, and predefined colors
-- **Disposal infrastructure** - `DisposableObject`, `LeaveOpenDisposableObject`, and `GCSafeHandle` for thread-safe resource management
+- **Zero-copy Mat access** - `Span<T>`, `ReadOnlySpan<T>`, `Memory<T>`, `ReadOnlyMemory<T>`, `Memory2D<T>`, and
+  `ReadOnlyMemory2D<T>` accessors for fast pixel manipulation and async-friendly buffer usage
+- **ROI utilities** - `Roi`, `SafeRoi`, `ConstrainRoi`, and `RoiFromCenter` for bounded region-of-interest cropping with
+  configurable empty-ROI behavior
+- **Image transforms** – Rotate with adjusted bounds, letterbox creation, crop-by-bounds, and shrink-to-fit resizing
+  that reports whether the image changed
+- **Stream copy helpers** - `CopyTo(Stream)` and `CopyToAsync(Stream, CancellationToken)` copy continuous matrices in
+  one writing and non-continuous matrices row by row without including row padding
+- **Mat compression** - Pluggable compressors (PNG, Deflate, GZip, ZLib, Brotli, Zstd) with `CMat` for memory-efficient
+  compressed image storage. `CMat.Compress` is thread-safe — concurrent calls are serialized automatically
+- **Contour hierarchies** - Structured `EmguContour`, `EmguContours`, and `EmguContourFamily` wrappers for OpenCV
+  contour trees using hierarchy links
+- **Drawing helpers** - Polygon geometry, multi-line text rendering with alignment, SVG path generation, and predefined
+  colors
+- **Disposal infrastructure** - `DisposableObject`, `LeaveOpenDisposableObject`, and `GCSafeHandle` for thread-safe
+  resource management
 
 ## Requirements
 
@@ -39,12 +50,13 @@ dotnet add package EmguExtensions
 
 ## Quick Start
 
-### Span-Based Mat Access
+### Zero-Copy Mat Access
 
 ```csharp
 using EmguExtensions;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
+using CommunityToolkit.HighPerformance;
 
 // Create or load a Mat
 using var mat = new Mat(100, 100, DepthType.Cv8U, 1);
@@ -56,6 +68,26 @@ span[0] = 255; // Set first pixel
 // 2D span access
 var span2D = mat.GetSpan2D<byte>();
 span2D[10, 20] = 128; // Row 10, Col 20
+
+// Memory access is useful when an API needs Memory<T> or ReadOnlyMemory<T>.
+ReadOnlyMemory<byte> bytes = mat.GetReadOnlyMemoryOfBytes();
+Memory<byte> writableBytes = mat.GetMemoryOfBytes();
+writableBytes.Span[1] = 64;
+```
+
+`GetSpan<T>`, `GetMemory<T>`, and their read-only counterparts require a continuous `Mat`. Use the 2D accessors for ROI
+views or other non-continuous matrices:
+
+```csharp
+using var source = new Mat(100, 100, DepthType.Cv8U, 1);
+using var roi = new Mat(source, new Rectangle(10, 10, 40, 40)); // Usually non-continuous
+
+var memory2D = roi.GetMemory2D<byte>();
+memory2D.Span[0, 0] = 255;
+
+ReadOnlyMemory2D<byte> readOnlyRoi = source.GetReadOnlyMemory2D<byte>(
+    new Rectangle(10, 10, 40, 40));
+byte first = readOnlyRoi.Span[0, 0];
 ```
 
 ### Safe ROI Cropping
@@ -102,6 +134,22 @@ using var rotated = new Mat();
 source.RotateAdjustBounds(rotated, angle: 30);
 ```
 
+### Copy Mat Data to Streams
+
+```csharp
+using var output = File.Create("frame.raw");
+
+// Synchronous copy.
+mat.CopyTo(output);
+
+// Async copy with cancellation support.
+await using var asyncOutput = File.Create("frame-async.raw");
+await mat.CopyToAsync(asyncOutput, cancellationToken);
+```
+
+For continuous matrices the whole data block is written in one operation. For non-continuous matrices, such as
+partial-width ROI views, rows are written individually, so row padding is not included.
+
 ### Mat Compression with CMat
 
 ```csharp
@@ -131,6 +179,11 @@ cmat.ChangeCompressor(MatCompressorDeflate.Instance, reEncodeWithNewCompressor: 
 
 // Equality is hash-based (XxHash3) — O(1) for mismatches, fast for collections
 bool same = cmat1 == cmat2;
+
+// Direct compressor APIs also support async compression/decompression.
+byte[] compressed = await MatCompressorBrotli.Instance.CompressAsync(mat, cancellationToken);
+using var decompressed = mat.New();
+await MatCompressorBrotli.Instance.DecompressAsync(compressed, decompressed, cancellationToken);
 ```
 
 ### Contour Hierarchy
@@ -168,25 +221,32 @@ mat.PutTextExtended("Line 1\nLine 2\nLine 3",
 
 ## Available Compressors
 
-| Compressor | Class | Description |
-|---|---|---|
-| None | `MatCompressorNone` | No compression (raw bytes) |
-| PNG | `MatCompressorPng` | PNG image encoding via OpenCV |
-| Deflate | `MatCompressorDeflate` | Deflate stream compression |
-| GZip | `MatCompressorGZip` | GZip stream compression |
-| ZLib | `MatCompressorZLib` | ZLib stream compression |
-| Brotli | `MatCompressorBrotli` | Brotli stream compression |
-| Zstd | `MatCompressorZstd` | Zstandard compression (.NET 11+) |
+| Compressor | Class                  | Description                      |
+|------------|------------------------|----------------------------------|
+| None       | `MatCompressorNone`    | No compression (raw bytes)       |
+| PNG        | `MatCompressorPng`     | PNG image encoding via OpenCV    |
+| Deflate    | `MatCompressorDeflate` | Deflate stream compression       |
+| GZip       | `MatCompressorGZip`    | GZip stream compression          |
+| ZLib       | `MatCompressorZLib`    | ZLib stream compression          |
+| Brotli     | `MatCompressorBrotli`  | Brotli stream compression        |
+| Zstd       | `MatCompressorZstd`    | Zstandard compression (.NET 11+) |
 
-All compressors are singletons accessed via `Instance` (e.g., `MatCompressorBrotli.Instance`).  
+All compressors are singletons accessed via `Instance` (e.g., `MatCompressorBrotli.Instance`). Public `CompressAsync`
+and `DecompressAsync` methods call overrideable `CompressCoreAsync` and `DecompressCoreAsync` methods, so custom
+compressors can provide native async behavior instead of only using the default background-thread wrapper.
+
+`CompressionLevel` values are mapped to each compressor's native level range. For Brotli, `NoCompression`, `Fastest`,
+`Optimal`, and `SmallestSize` map to qualities `0`, `1`, `4`, and `11` respectively.
 
 `CMat` automatically falls back to raw (uncompressed) storage when:
+
 - The source is smaller than `ThresholdToCompress` (default 512 bytes), or
 - Compression produces a result larger than the original.
 
 ## Benchmarks
 
 ### Compressor benchmark
+
 ```
 BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.8246/25H2/2025Update/HudsonValley2)
 AMD Ryzen 9 7845HX with Radeon Graphics 3.00GHz, 1 CPU, 24 logical and 12 physical cores
@@ -284,4 +344,4 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
