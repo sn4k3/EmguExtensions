@@ -34,7 +34,6 @@ using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using Emgu.CV.Util;
-using Emgu.CV.XImgproc;
 using StageKit.Primitives;
 using Point = System.Drawing.Point;
 using Size = System.Drawing.Size;
@@ -3452,60 +3451,59 @@ public static partial class EmguCvExtensions
         /// Performs morphological skeletonization on the source image, reducing it to a single-pixel-wide representation
         /// of its shape while preserving the topological structure.
         /// </summary>
-        /// <param name="thinningType">The type of thinning algorithm to use for skeletonization.</param>
+        /// <param name="ksize">The size of the structuring element used for morphological operations.</param>
+        /// <param name="elementShape">The shape of the structuring element used for morphological operations.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A new matrix containing the skeletonized image.</returns>
-        public Mat Skeletonize(ThinningTypes thinningType = ThinningTypes.ZhangSuen)
+        public Mat Skeletonize(Size ksize = default, MorphShapes elementShape = MorphShapes.Rectangle,
+            CancellationToken cancellationToken = default)
         {
-            var dst = new Mat();
-            XImgprocInvoke.Thinning(src, dst, thinningType);
-            return dst;
-
-            // Old implementation using basic morphological operations, kept for reference but not used due to performance reasons. The Zhang-Suen algorithm is much faster and produces the same result.
-            /*if (ksize.IsEmpty) ksize = new Size(3, 3);
+            if (ksize.IsEmpty) ksize = new Size(3, 3);
             var skeleton = src.NewZeros();
+            if (src.IsAllZero) return skeleton;
+
             using var kernel = CvInvoke.GetStructuringElement(elementShape, ksize, AnchorCenter);
-            using var current = src.Clone();
-            using var eroded = new Mat();
             using var temp = new Mat();
+            var current = src.Clone();
+            var eroded = new Mat();
 
-            iterations = 0;
-            while (true)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                iterations++;
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                // erode and dilate the image using the structuring element
-                CvInvoke.Erode(current, eroded, kernel, AnchorCenter, 1, BorderType.Reflect101, default);
-                CvInvoke.Dilate(eroded, temp, kernel, AnchorCenter, 1, BorderType.Reflect101, default);
+                    CvInvoke.Erode(current, eroded, kernel, AnchorCenter, 1, BorderType.Reflect101, default);
+                    CvInvoke.Dilate(eroded, temp, kernel, AnchorCenter, 1, BorderType.Reflect101, default);
+                    CvInvoke.Subtract(current, temp, temp);
+                    CvInvoke.BitwiseOr(skeleton, temp, skeleton);
 
-                // subtract the temporary image from the original, eroded
-                // image, then take the bitwise 'or' between the skeleton
-                // and the temporary image
-                CvInvoke.Subtract(current, temp, temp);
-                CvInvoke.BitwiseOr(skeleton, temp, skeleton);
+                    if (eroded.IsAllZero) break;
 
-                // if there are no more 'white' pixels in the image, then
-                // break from the loop
-                if (!CvInvoke.HasNonZero(eroded)) break;
-
-                // reuse the existing buffer instead of cloning
-                eroded.CopyTo(current);
+                    (current, eroded) = (eroded, current);
+                }
+            }
+            finally
+            {
+                current.Dispose();
+                eroded.Dispose();
             }
 
-            return skeleton;*/
+            return skeleton;
         }
 
 
         /// <summary>
         /// Performs morphological skeletonization asynchronously, offloading the iterative work to a background thread.
         /// </summary>
-        /// <param name="thinningType">The type of thinning algorithm to use for skeletonization.</param>
+        /// <param name="ksize">The size of the structuring element used for morphological operations.</param>
+        /// <param name="elementShape">The shape of the structuring element used for morphological operations.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is a new matrix containing the skeletonized image.</returns>
-        public Task<Mat> SkeletonizeAsync(ThinningTypes thinningType = ThinningTypes.ZhangSuen,
+        public Task<Mat> SkeletonizeAsync(Size ksize = default, MorphShapes elementShape = MorphShapes.Rectangle,
             CancellationToken cancellationToken = default)
         {
-            return Task.Run(() => src.Skeletonize(thinningType), cancellationToken);
+            return Task.Run(() => src.Skeletonize(ksize, elementShape, cancellationToken), cancellationToken);
         }
 
         /// <summary>

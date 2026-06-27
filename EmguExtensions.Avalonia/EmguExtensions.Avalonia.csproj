@@ -7,6 +7,8 @@
         <Description>Avalonia integration for EmguExtensions: convert Emgu.CV Mat images to Avalonia WriteableBitmap with direct memory locking.</Description>
         <PackageTags>emgu;emgucv;opencv;avalonia;writeablebitmap;mat;image-processing</PackageTags>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+        <Version>0.1.7</Version>
     </PropertyGroup>
 
     <ItemGroup>

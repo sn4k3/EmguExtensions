@@ -1,3 +1,7 @@
+# v0.1.8 (27/06/2026)
+
+- Change `Skeletonize` to use own implementation instead of `XImgProc` due to mini openCV build lacks of it
+
 # v0.1.7 (24/06/2026)
 
 - Add `CompressCoreAsync` and `DecompressCoreAsync` overrides to `MatCompressor`
