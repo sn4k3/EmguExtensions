@@ -39,8 +39,8 @@ public static class PointExtensions
     /// <returns></returns>
     public static double FindLength(Point start, Point end)
     {
-        double dx = end.X - start.X;
-        double dy = end.Y - start.Y;
+        var dx = (double)end.X - start.X;
+        var dy = (double)end.Y - start.Y;
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
@@ -55,13 +55,12 @@ public static class PointExtensions
         public Point Rotate(double angleDegree, Point pivot = default)
         {
             if (angleDegree % 360 == 0) return point;
-            double angle = angleDegree * Math.PI / 180;
-            double cos = Math.Cos(angle);
-            double sin = Math.Sin(angle);
-            int dx = point.X - pivot.X;
-            int dy = point.Y - pivot.Y;
-            double x = cos * dx - sin * dy + pivot.X;
-            double y = sin * dx + cos * dy + pivot.Y;
+            var angle = angleDegree * Math.PI / 180;
+            var (sin, cos) = Math.SinCos(angle);
+            var dx = (double)point.X - pivot.X;
+            var dy = (double)point.Y - pivot.Y;
+            var x = cos * dx - sin * dy + pivot.X;
+            var y = sin * dx + cos * dy + pivot.Y;
 
             return new((int)Math.Round(x), (int)Math.Round(y));
         }
@@ -78,13 +77,12 @@ public static class PointExtensions
         public PointF Rotate(double angleDegree, PointF pivot = default)
         {
             if (angleDegree % 360 == 0) return point;
-            double angle = angleDegree * Math.PI / 180;
-            double cos = Math.Cos(angle);
-            double sin = Math.Sin(angle);
-            double dx = point.X - pivot.X;
-            double dy = point.Y - pivot.Y;
-            double x = cos * dx - sin * dy + pivot.X;
-            double y = sin * dx + cos * dy + pivot.Y;
+            var angle = angleDegree * Math.PI / 180;
+            var (sin, cos) = Math.SinCos(angle);
+            var dx = (double)point.X - pivot.X;
+            var dy = (double)point.Y - pivot.Y;
+            var x = cos * dx - sin * dy + pivot.X;
+            var y = sin * dx + cos * dy + pivot.Y;
 
             return new((float)x, (float)y);
         }

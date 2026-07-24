@@ -343,7 +343,8 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     {
         if (other is null) return false;
         if (ReferenceEquals(this, other)) return true;
-        return Id == other.Id;
+        return string.Equals(Provider, other.Provider, StringComparison.Ordinal)
+               && string.Equals(Name, other.Name, StringComparison.Ordinal);
     }
 
     /// <inheritdoc />
@@ -357,7 +358,9 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <inheritdoc />
     public override int GetHashCode()
     {
-        return StringComparer.Ordinal.GetHashCode(Id);
+        return HashCode.Combine(
+            StringComparer.Ordinal.GetHashCode(Provider),
+            StringComparer.Ordinal.GetHashCode(Name));
     }
 
     #endregion

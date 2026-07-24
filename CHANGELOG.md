@@ -1,3 +1,16 @@
+# v0.1.9 (24/07/2026)
+
+- Add `EmguCvExtensions.CreateVector` to wrap a byte buffer in a Mat
+- Refactor span/memory accessors to use shared `ResolveElementRange` helper
+- Add validation methods: `ValidateByteRange`, `ValidatePixelCoordinates`, `ValidateRoi`
+- Fix integer overflow in `FindLength`, `Rotate`, and polygon calculations
+- Fix `CalculatePolygonRadiusFromSideLength` formula; raise minimum sides guard to 3
+- Add a stack-allocation fast path in Brotli compressor for small inputs
+- Replace `Marshal.Copy` with span-based copy in `SetByte`
+- Fix `InitMat` array factory to dispose already-created Mats on failure
+- Change `MatCompressor` equality to use Provider+Name instead of Id
+- Update Avalonia to 12.1.0, DotNext to 6.4.1, and other dependencies
+
 # v0.1.8 (27/06/2026)
 
 - Change `Skeletonize` to use own implementation instead of `XImgProc` due to mini openCV build lacks of it
@@ -25,7 +38,7 @@
 
 # v0.1.5 (30/05/2026)
 
-- Improve the `MatCompressor` schemantic by favor int compressionLevel instead of enum
+- Improve the `MatCompressor` schematic by favoring int compressionLevel instead of enum
 
 # v0.1.4 (29/05/2026)
 
@@ -54,7 +67,7 @@
 
 - Add MatCompressor `Id` and `Provider` properties, a `GetCompressorById` helper
 - Add `GetSpanxxxOfBytes` methods to `EmguCvExtensions` to get spans of bytes for image data
-- Rename `EmguExtensions` to `EmguCvExtensions` to not colide with assembly name.
+- Rename `EmguExtensions` to `EmguCvExtensions` to not collide with the assembly name.
 
 # v0.1.1 (29/04/2026)
 

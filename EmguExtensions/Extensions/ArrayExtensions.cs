@@ -40,7 +40,7 @@ public static class ArrayExtensions
         {
             if (buffer.Length == 0) return [];
             var copy = GC.AllocateUninitializedArray<byte>(buffer.Length);
-            buffer.CopyTo(copy);
+            buffer.AsSpan().CopyTo(copy);
             return copy;
         }
     }

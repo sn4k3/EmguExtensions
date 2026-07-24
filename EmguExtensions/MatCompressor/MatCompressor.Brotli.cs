@@ -37,6 +37,7 @@ public sealed class MatCompressorBrotli : MatCompressor
     private const int QualityMin = 0;
     private const int QualityDefault = 4;
     private const int QualityMax = 11;
+    private const int MaxStackBufferSize = 4 * 1024;
 
     /// <summary>
     /// Provides a singleton instance of the <see cref="MatCompressorBrotli"/> class for efficient reuse across the application.
@@ -70,6 +71,19 @@ public sealed class MatCompressorBrotli : MatCompressor
     /// <inheritdoc />
     protected override byte[] CompressCore(Mat src, int compressionLevel)
     {
+        if (src.IsContinuous)
+        {
+            var source = src.GetReadOnlySpanOfBytes();
+            if (source.Length <= MaxStackBufferSize)
+            {
+                var maxCompressedLength = BrotliEncoder.GetMaxCompressedLength(source.Length);
+                if (maxCompressedLength <= MaxStackBufferSize)
+                {
+                    return CompressContiguous(source, maxCompressedLength, compressionLevel);
+                }
+            }
+        }
+
         var options = new BrotliCompressionOptions
         {
             Quality = compressionLevel
@@ -81,6 +95,37 @@ public sealed class MatCompressorBrotli : MatCompressor
         }
 
         return buffer.ToArray();
+    }
+
+    private static byte[] CompressContiguous(
+        ReadOnlySpan<byte> source,
+        int maxCompressedLength,
+        int compressionLevel)
+    {
+        Span<byte> buffer = stackalloc byte[maxCompressedLength];
+        return CompressContiguous(source, buffer, compressionLevel);
+    }
+
+    private static byte[] CompressContiguous(
+        ReadOnlySpan<byte> source,
+        Span<byte> destination,
+        int compressionLevel)
+    {
+        if (!BrotliEncoder.TryCompress(
+                source,
+                destination,
+                out var bytesWritten,
+                compressionLevel,
+                WindowBitsDefault))
+        {
+            throw new InvalidDataException("Failed to compress Brotli data.");
+        }
+
+        if (bytesWritten == 0) return [];
+
+        var result = GC.AllocateUninitializedArray<byte>(bytesWritten);
+        destination[..bytesWritten].CopyTo(result);
+        return result;
     }
 
     /// <inheritdoc />

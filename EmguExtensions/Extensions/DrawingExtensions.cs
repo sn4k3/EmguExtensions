@@ -78,7 +78,7 @@ public static class DrawingExtensions
     /// <returns>The length of each side.</returns>
     public static double CalculatePolygonSideLengthFromRadius(double radius, int sides)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(sides, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(sides, 3);
         return 2 * radius * Math.Sin(Math.PI / sides);
     }
 
@@ -90,7 +90,7 @@ public static class DrawingExtensions
     /// <returns>The apothem length.</returns>
     public static double CalculatePolygonVerticalLengthFromRadius(double radius, int sides)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(sides, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(sides, 3);
         return radius * Math.Cos(Math.PI / sides);
     }
 
@@ -102,9 +102,8 @@ public static class DrawingExtensions
     /// <returns>The circumscribed radius.</returns>
     public static double CalculatePolygonRadiusFromSideLength(double length, int sides)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(sides, 1);
-        var theta = 360.0 / sides;
-        return length / (2 * Math.Cos((90 - theta / 2) * Math.PI / 180.0));
+        ArgumentOutOfRangeException.ThrowIfLessThan(sides, 3);
+        return length / (2 * Math.Sin(Math.PI / sides));
     }
 
     /// <summary>
@@ -146,8 +145,9 @@ public static class DrawingExtensions
                 var angle = startRotationAngleRadians + i * angleIncrement;
 
                 // Scale the X and Y coordinates independently for pixel pitch
-                var x = (int)Math.Round(center.X + radiusX * Math.Cos(angle), midpointRounding);
-                var y = (int)Math.Round(center.Y + radiusY * Math.Sin(angle), midpointRounding);
+                var (sin, cos) = Math.SinCos(angle);
+                var x = (int)Math.Round(center.X + radiusX * cos, midpointRounding);
+                var y = (int)Math.Round(center.Y + radiusY * sin, midpointRounding);
 
                 vertices[i] = new Point(x, y);
             }

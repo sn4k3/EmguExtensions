@@ -27,7 +27,6 @@ using System.IO.Compression;
 using System.IO.Hashing;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using CommunityToolkit.HighPerformance;
 using DotNext.Buffers;
 using Emgu.CV;
@@ -391,6 +390,83 @@ public static partial class EmguCvExtensions
 
         #endregion
 
+        #region Validation Methods
+
+        /// <summary>
+        /// Calculates the total number of accessible bytes in the matrix, taking into account the height and step size. This method is useful for determining the amount of memory that can be safely accessed when working with the matrix data.
+        /// </summary>
+        /// <returns>The total number of accessible bytes in the matrix.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private long GetAccessibleByteCount()
+        {
+            return src.Height == 0 ? 0 : (long)(src.Height - 1) * src.Step + src.RealStep;
+        }
+
+        /// <summary>
+        /// Validates the specified byte range within the matrix.
+        /// </summary>
+        /// <param name="offset">The starting byte offset.</param>
+        /// <param name="length">The length of the byte range.</param>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the specified byte range is invalid.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ValidateByteRange(int offset, int length)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
+            ArgumentOutOfRangeException.ThrowIfNegative(length);
+
+            var availableBytes = src.GetAccessibleByteCount();
+            if ((long)offset + length > availableBytes)
+                throw new ArgumentOutOfRangeException(nameof(offset), offset,
+                    $"The requested byte range exceeds the accessible matrix data ({availableBytes} bytes).");
+        }
+
+        /// <summary>
+        /// Validates the specified pixel coordinates within the matrix.
+        /// </summary>
+        /// <param name="x">The X coordinate of the pixel.</param>
+        /// <param name="y">The Y coordinate of the pixel.</param>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the specified pixel coordinates are out of range.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ValidatePixelCoordinates(int x, int y)
+        {
+            if ((uint)x >= (uint)src.Width)
+                throw new ArgumentOutOfRangeException(nameof(x), x,
+                    $"X must be in the range [0, {src.Width}).");
+            if ((uint)y >= (uint)src.Height)
+                throw new ArgumentOutOfRangeException(nameof(y), y,
+                    $"Y must be in the range [0, {src.Height}).");
+        }
+
+        /// <summary>
+        /// Validates the specified region of interest (ROI) within the matrix.
+        /// </summary>
+        /// <param name="roi">The region of interest to validate.</param>
+        /// <returns>True if the ROI is valid; otherwise, false.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the specified ROI is out of range.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool ValidateRoi(Rectangle roi)
+        {
+            if (roi.Width == 0 || roi.Height == 0) return false;
+            if (roi.X < 0)
+                throw new ArgumentOutOfRangeException(nameof(roi), roi, "ROI X must be non-negative.");
+            if (roi.Y < 0)
+                throw new ArgumentOutOfRangeException(nameof(roi), roi, "ROI Y must be non-negative.");
+            if (roi.Width < 0)
+                throw new ArgumentOutOfRangeException(nameof(roi), roi, "ROI width must be non-negative.");
+            if (roi.Height < 0)
+                throw new ArgumentOutOfRangeException(nameof(roi), roi, "ROI height must be non-negative.");
+            if (roi.X > src.Width || roi.Width > src.Width - roi.X)
+                throw new ArgumentOutOfRangeException(nameof(roi), roi,
+                    $"ROI exceeds matrix width ({src.Width}).");
+            if (roi.Y > src.Height || roi.Height > src.Height - roi.Y)
+                throw new ArgumentOutOfRangeException(nameof(roi), roi,
+                    $"ROI exceeds matrix height ({src.Height}).");
+
+            return true;
+        }
+
+        #endregion
+
         #region Copy methods
 
         /// <summary>
@@ -489,6 +565,8 @@ public static partial class EmguCvExtensions
         /// copied.</param>
         public void CopyTo(Mat destination, Point offset, Mat? mask = null)
         {
+            ArgumentNullException.ThrowIfNull(destination);
+
             // Calculate the overlapping region between source and destination
             var srcX = Math.Max(0, -offset.X);
             var srcY = Math.Max(0, -offset.Y);
@@ -638,32 +716,20 @@ public static partial class EmguCvExtensions
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
         public Span<T> GetSpan<T>(int length, int offset) where T : struct
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(offset);
-
             if (!src.IsContinuous)
                 throw new NotSupportedException(
                     "To create a Span, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Span2D instead.");
 
-            var sizeOfT = Unsafe.SizeOf<T>();
-            offset *= sizeOfT;
-            var maxLength = (src.ByteCountInt32 - offset) / sizeOfT;
-
-            if (maxLength < 0)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset, "Offset value overflow this Mat size.");
-
-            if (length <= 0)
-            {
-                length = maxLength;
-            }
-            else if (length > maxLength)
-            {
-                throw new ArgumentOutOfRangeException(nameof(length), length,
-                    $"The maximum size allowed for this Mat with an offset of {offset} is {maxLength}.");
-            }
+            length = ResolveElementRange(
+                src.ByteCountInt32,
+                Unsafe.SizeOf<T>(),
+                length,
+                offset,
+                out var byteOffset);
 
             unsafe
             {
-                return new Span<T>(IntPtr.Add(src.DataPointer, offset).ToPointer(), length);
+                return new Span<T>(IntPtr.Add(src.DataPointer, byteOffset).ToPointer(), length);
             }
         }
 
@@ -705,32 +771,20 @@ public static partial class EmguCvExtensions
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
         public ReadOnlySpan<T> GetReadOnlySpan<T>(int length = 0, int offset = 0) where T : struct
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(offset);
-
             if (!src.IsContinuous)
                 throw new NotSupportedException(
                     "To create a Span, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Span2D instead.");
 
-            var sizeOfT = Unsafe.SizeOf<T>();
-            offset *= sizeOfT;
-            var maxLength = (src.ByteCountInt32 - offset) / sizeOfT;
-
-            if (maxLength < 0)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset, "Offset value overflow this Mat size.");
-
-            if (length <= 0)
-            {
-                length = maxLength;
-            }
-            else if (length > maxLength)
-            {
-                throw new ArgumentOutOfRangeException(nameof(length), length,
-                    $"The maximum size allowed for this Mat with an offset of {offset} is {maxLength}.");
-            }
+            length = ResolveElementRange(
+                src.ByteCountInt32,
+                Unsafe.SizeOf<T>(),
+                length,
+                offset,
+                out var byteOffset);
 
             unsafe
             {
-                return new ReadOnlySpan<T>(IntPtr.Add(src.DataPointer, offset).ToPointer(), length);
+                return new ReadOnlySpan<T>(IntPtr.Add(src.DataPointer, byteOffset).ToPointer(), length);
             }
         }
 
@@ -842,15 +896,7 @@ public static partial class EmguCvExtensions
         /// </exception>
         public Span2D<T> GetSpan2D<T>(Rectangle roi) where T : struct
         {
-            if (roi.IsEmpty) return Span2D<T>.Empty;
-            if (roi.X < 0) throw new ArgumentOutOfRangeException(nameof(roi), $"ROI X ({roi.X}) must be non-negative.");
-            if (roi.Y < 0) throw new ArgumentOutOfRangeException(nameof(roi), $"ROI Y ({roi.Y}) must be non-negative.");
-            if (roi.Right > src.Width)
-                throw new ArgumentOutOfRangeException(nameof(roi),
-                    $"ROI right edge ({roi.Right}) exceeds matrix width ({src.Width}).");
-            if (roi.Bottom > src.Height)
-                throw new ArgumentOutOfRangeException(nameof(roi),
-                    $"ROI bottom edge ({roi.Bottom}) exceeds matrix height ({src.Height}).");
+            if (!ValidateRoi(src, roi)) return Span2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
@@ -893,15 +939,7 @@ public static partial class EmguCvExtensions
         /// </exception>
         public ReadOnlySpan2D<T> GetReadOnlySpan2D<T>(Rectangle roi) where T : struct
         {
-            if (roi.IsEmpty) return ReadOnlySpan2D<T>.Empty;
-            if (roi.X < 0) throw new ArgumentOutOfRangeException(nameof(roi), $"ROI X ({roi.X}) must be non-negative.");
-            if (roi.Y < 0) throw new ArgumentOutOfRangeException(nameof(roi), $"ROI Y ({roi.Y}) must be non-negative.");
-            if (roi.Right > src.Width)
-                throw new ArgumentOutOfRangeException(nameof(roi),
-                    $"ROI right edge ({roi.Right}) exceeds matrix width ({src.Width}).");
-            if (roi.Bottom > src.Height)
-                throw new ArgumentOutOfRangeException(nameof(roi),
-                    $"ROI bottom edge ({roi.Bottom}) exceeds matrix height ({src.Height}).");
+            if (!ValidateRoi(src, roi)) return ReadOnlySpan2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
@@ -942,34 +980,21 @@ public static partial class EmguCvExtensions
         public Span<T> GetRowSpan<T>(int y, int length = 0, int offset = 0) where T : struct
         {
             ArgumentOutOfRangeException.ThrowIfNegative(y);
-            ArgumentOutOfRangeException.ThrowIfNegative(offset);
 
             if (y >= src.Height)
                 throw new ArgumentOutOfRangeException(nameof(y), y,
                     $"Row index must be less than the matrix height ({src.Height}).");
 
-            var sizeOfT = Unsafe.SizeOf<T>();
-
-            offset *= sizeOfT;
-            var maxLength = (src.RealStep - offset) / sizeOfT;
-
-            if (maxLength < 0)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset,
-                    "Offset value overflow this Mat row size.");
-
-            if (length <= 0)
-            {
-                length = maxLength;
-            }
-            else if (length > maxLength)
-            {
-                throw new ArgumentOutOfRangeException(nameof(length), length,
-                    $"The maximum size allowed for this Mat row with an offset of {offset} is {maxLength}.");
-            }
+            length = ResolveElementRange(
+                src.RealStep,
+                Unsafe.SizeOf<T>(),
+                length,
+                offset,
+                out var byteOffset);
 
             unsafe
             {
-                return new Span<T>(IntPtr.Add(src.DataPointer, y * src.Step + offset).ToPointer(), length);
+                return new Span<T>(IntPtr.Add(src.DataPointer, y * src.Step + byteOffset).ToPointer(), length);
             }
         }
 
@@ -1036,28 +1061,16 @@ public static partial class EmguCvExtensions
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
         public Memory<T> GetMemory<T>(int length = 0, int offset = 0) where T : unmanaged
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(offset);
-
             if (!src.IsContinuous)
                 throw new NotSupportedException(
                     "To create a Memory, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Memory2D instead.");
 
-            var sizeOfT = Unsafe.SizeOf<T>();
-            var byteOffset = offset * sizeOfT;
-            var maxLength = (src.ByteCountInt32 - byteOffset) / sizeOfT;
-
-            if (maxLength < 0)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset, "Offset value overflow this Mat size.");
-
-            if (length <= 0)
-            {
-                length = maxLength;
-            }
-            else if (length > maxLength)
-            {
-                throw new ArgumentOutOfRangeException(nameof(length), length,
-                    $"The maximum size allowed for this Mat with an offset of {byteOffset} is {maxLength}.");
-            }
+            length = ResolveElementRange(
+                src.ByteCountInt32,
+                Unsafe.SizeOf<T>(),
+                length,
+                offset,
+                out var byteOffset);
 
             return new UnmanagedMemoryManager<T>(IntPtr.Add(src.DataPointer, byteOffset), length).Memory;
         }
@@ -1213,15 +1226,7 @@ public static partial class EmguCvExtensions
         /// </exception>
         public Memory2D<T> GetMemory2D<T>(Rectangle roi) where T : unmanaged
         {
-            if (roi.IsEmpty) return Memory2D<T>.Empty;
-            if (roi.X < 0) throw new ArgumentOutOfRangeException(nameof(roi), $"ROI X ({roi.X}) must be non-negative.");
-            if (roi.Y < 0) throw new ArgumentOutOfRangeException(nameof(roi), $"ROI Y ({roi.Y}) must be non-negative.");
-            if (roi.Right > src.Width)
-                throw new ArgumentOutOfRangeException(nameof(roi),
-                    $"ROI right edge ({roi.Right}) exceeds matrix width ({src.Width}).");
-            if (roi.Bottom > src.Height)
-                throw new ArgumentOutOfRangeException(nameof(roi),
-                    $"ROI bottom edge ({roi.Bottom}) exceeds matrix height ({src.Height}).");
+            if (!ValidateRoi(src, roi)) return Memory2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
@@ -1265,15 +1270,7 @@ public static partial class EmguCvExtensions
         /// </exception>
         public ReadOnlyMemory2D<T> GetReadOnlyMemory2D<T>(Rectangle roi) where T : unmanaged
         {
-            if (roi.IsEmpty) return ReadOnlyMemory2D<T>.Empty;
-            if (roi.X < 0) throw new ArgumentOutOfRangeException(nameof(roi), $"ROI X ({roi.X}) must be non-negative.");
-            if (roi.Y < 0) throw new ArgumentOutOfRangeException(nameof(roi), $"ROI Y ({roi.Y}) must be non-negative.");
-            if (roi.Right > src.Width)
-                throw new ArgumentOutOfRangeException(nameof(roi),
-                    $"ROI right edge ({roi.Right}) exceeds matrix width ({src.Width}).");
-            if (roi.Bottom > src.Height)
-                throw new ArgumentOutOfRangeException(nameof(roi),
-                    $"ROI bottom edge ({roi.Bottom}) exceeds matrix height ({src.Height}).");
+            if (!ValidateRoi(src, roi)) return ReadOnlyMemory2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
@@ -1318,30 +1315,17 @@ public static partial class EmguCvExtensions
         public Memory<T> GetRowMemory<T>(int y, int length = 0, int offset = 0) where T : unmanaged
         {
             ArgumentOutOfRangeException.ThrowIfNegative(y);
-            ArgumentOutOfRangeException.ThrowIfNegative(offset);
 
             if (y >= src.Height)
                 throw new ArgumentOutOfRangeException(nameof(y), y,
                     $"Row index must be less than the matrix height ({src.Height}).");
 
-            var sizeOfT = Unsafe.SizeOf<T>();
-
-            var byteOffset = offset * sizeOfT;
-            var maxLength = (src.RealStep - byteOffset) / sizeOfT;
-
-            if (maxLength < 0)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset,
-                    "Offset value overflow this Mat row size.");
-
-            if (length <= 0)
-            {
-                length = maxLength;
-            }
-            else if (length > maxLength)
-            {
-                throw new ArgumentOutOfRangeException(nameof(length), length,
-                    $"The maximum size allowed for this Mat row with an offset of {byteOffset} is {maxLength}.");
-            }
+            length = ResolveElementRange(
+                src.RealStep,
+                Unsafe.SizeOf<T>(),
+                length,
+                offset,
+                out var byteOffset);
 
             return new UnmanagedMemoryManager<T>(IntPtr.Add(src.DataPointer, y * src.Step + byteOffset), length).Memory;
         }
@@ -1764,7 +1748,8 @@ public static partial class EmguCvExtensions
         /// <returns>The total byte count for the specified number of pixels.</returns>
         public int GetByteCount(int pixels)
         {
-            return pixels * src.ElementSize;
+            ArgumentOutOfRangeException.ThrowIfNegative(pixels);
+            return checked(pixels * src.ElementSize);
         }
 
         /// <summary>
@@ -1774,7 +1759,8 @@ public static partial class EmguCvExtensions
         /// <returns>The total byte count for the specified number of pixels.</returns>
         public long GetByteCount(long pixels)
         {
-            return pixels * src.ElementSize;
+            ArgumentOutOfRangeException.ThrowIfNegative(pixels);
+            return checked(pixels * src.ElementSize);
         }
 
         /// <summary>
@@ -1784,7 +1770,10 @@ public static partial class EmguCvExtensions
         /// <returns>The byte offset to the start of the specified row.</returns>
         public int GetRowPos(int y)
         {
-            return y * src.RealStep;
+            if ((uint)y >= (uint)src.Height)
+                throw new ArgumentOutOfRangeException(nameof(y), y,
+                    $"Y must be in the range [0, {src.Height}).");
+            return checked(y * src.Step);
         }
 
         /// <summary>
@@ -1795,7 +1784,8 @@ public static partial class EmguCvExtensions
         /// <returns>The pixel index position</returns>
         public int GetPixelPos(int x, int y)
         {
-            return src.GetRowPos(y) + src.GetByteCount(x);
+            ValidatePixelCoordinates(src, x, y);
+            return checked(y * src.Step + x * src.ElementSize);
         }
 
         /// <summary>
@@ -1817,6 +1807,7 @@ public static partial class EmguCvExtensions
         {
             if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
                 throw new InvalidOperationException("Cannot read from an empty or uninitialized Mat.");
+            ValidateByteRange(src, pos, 1);
             unsafe
             {
                 return *(src.BytePointer + pos);
@@ -1853,6 +1844,7 @@ public static partial class EmguCvExtensions
         {
             if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
                 throw new InvalidOperationException("Cannot write to an empty or uninitialized Mat.");
+            ValidateByteRange(src, pixel, 1);
             unsafe
             {
                 *(src.BytePointer + pixel) = value;
@@ -1869,7 +1861,11 @@ public static partial class EmguCvExtensions
             ArgumentNullException.ThrowIfNull(value);
             if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
                 throw new InvalidOperationException("Cannot write to an empty or uninitialized Mat.");
-            Marshal.Copy(value, 0, src.DataPointer + pixel, value.Length);
+            ValidateByteRange(src, pixel, value.Length);
+            unsafe
+            {
+                value.AsSpan().CopyTo(new Span<byte>(src.BytePointer + pixel, value.Length));
+            }
         }
 
         /// <summary>
@@ -1914,6 +1910,23 @@ public static partial class EmguCvExtensions
             if (length == 0) return [];
             var copy = GC.AllocateUninitializedArray<byte>(length);
             src.CopyTo(copy);
+
+            /*
+            var destination = copy.AsSpan();
+            if (src.IsContinuous)
+            {
+                src.GetReadOnlySpanOfBytes().CopyTo(destination);
+                return copy;
+            }
+
+            var offset = 0;
+            for (var row = 0; row < src.Height; row++)
+            {
+                var sourceRow = src.GetReadOnlyRowSpanOfBytes(row);
+                sourceRow.CopyTo(destination[offset..]);
+                offset += sourceRow.Length;
+            }
+            */
             return copy;
         }
 

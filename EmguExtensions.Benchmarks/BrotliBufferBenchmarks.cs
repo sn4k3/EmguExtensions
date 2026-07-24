@@ -18,7 +18,7 @@ public class BrotliBufferBenchmarks
     [Params(1920 * 1080)]
     public int ByteCount { get; set; }
 
-    [Params(CompressionLevel.Fastest, CompressionLevel.Optimal)]
+    [ParamsAllValues]
     public CompressionLevel Level { get; set; }
 
     private byte[] _sourceBytes = null!;
@@ -84,7 +84,11 @@ public class BrotliBufferBenchmarks
     public byte[] CompressWithMemoryStream()
     {
         using var compressedStream = new MemoryStream();
-        using (var brotliStream = new BrotliStream(compressedStream, Level, leaveOpen: true))
+        var options = new BrotliCompressionOptions
+        {
+            Quality = GetBrotliQuality(Level)
+        };
+        using (var brotliStream = new BrotliStream(compressedStream, options, leaveOpen: true))
         {
             brotliStream.Write(_sourceBytes);
         }
@@ -96,7 +100,14 @@ public class BrotliBufferBenchmarks
     [BenchmarkCategory("Compress")]
     public byte[] CompressWithSparseBufferWriter()
     {
-        return CompressWithSparseBufferWriterCore();
+        return CompressWithSparseBufferWriterCore(SparseBufferGrowth.Linear);
+    }
+
+    [Benchmark(Description = "Compress: SparseBufferWriter exponential")]
+    [BenchmarkCategory("Compress")]
+    public byte[] CompressWithSparseBufferWriterExponential()
+    {
+        return CompressWithSparseBufferWriterCore(SparseBufferGrowth.Exponential);
     }
 
     [Benchmark(Description = "Compress: BufferWriterSlim")]
@@ -112,7 +123,7 @@ public class BrotliBufferBenchmarks
                     buffer.GetSpan(maxCompressedLength),
                     out var bytesWritten,
                     GetBrotliQuality(Level),
-                    GetBrotliWindow(Level)))
+                    GetBrotliWindow()))
             {
                 throw new InvalidDataException("Brotli compression failed.");
             }
@@ -126,10 +137,15 @@ public class BrotliBufferBenchmarks
         }
     }
 
-    private byte[] CompressWithSparseBufferWriterCore()
+    private byte[] CompressWithSparseBufferWriterCore(
+        SparseBufferGrowth growth = SparseBufferGrowth.Linear)
     {
-        using var buffer = new SparseBufferWriter<byte>(Math.Min(64 * 1024, _sourceBytes.Length), SparseBufferGrowth.Linear);
-        using (var brotliStream = new BrotliStream(Stream.Create(buffer, true), Level))
+        using var buffer = new SparseBufferWriter<byte>(Math.Min(64 * 1024, _sourceBytes.Length), growth);
+        var options = new BrotliCompressionOptions
+        {
+            Quality = GetBrotliQuality(Level)
+        };
+        using (var brotliStream = new BrotliStream(Stream.Create(buffer, true), options))
         {
             brotliStream.Write(_sourceBytes);
         }
@@ -144,13 +160,13 @@ public class BrotliBufferBenchmarks
             CompressionLevel.NoCompression => 0,
             CompressionLevel.Fastest => 1,
             CompressionLevel.SmallestSize => 11,
-            _ => 5
+            _ => 4
         };
     }
 
-    private static int GetBrotliWindow(CompressionLevel level)
+    private static int GetBrotliWindow()
     {
-        return level == CompressionLevel.NoCompression ? 10 : 22;
+        return 22;
     }
 
     private static byte[] ToArray(ReadOnlySpan<byte> span)
