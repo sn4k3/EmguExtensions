@@ -31,9 +31,7 @@ namespace EmguExtensions;
 public sealed class MatCompressorBrotli : MatCompressor
 {
     // Constants fetched from System.IO.Compression.BrotliUtils.
-    private const int WindowBitsMin = 10;
     private const int WindowBitsDefault = 22;
-    private const int WindowBitsMax = 24;
     private const int QualityMin = 0;
     private const int QualityDefault = 4;
     private const int QualityMax = 11;
@@ -64,7 +62,7 @@ public sealed class MatCompressorBrotli : MatCompressor
             CompressionLevel.Fastest => 1,
             CompressionLevel.Optimal => QualityDefault,
             CompressionLevel.SmallestSize => QualityMax,
-            _ => throw new ArgumentException("Invalid CompressionLevel value.", nameof(compressionLevel))
+            _ => throw new ArgumentOutOfRangeException(nameof(compressionLevel), compressionLevel, null)
         };
     }
 
@@ -131,15 +129,27 @@ public sealed class MatCompressorBrotli : MatCompressor
     /// <inheritdoc />
     protected override void DecompressCore(byte[] compressedBytes, Mat dst)
     {
-        var dstSpan = dst.GetSpan<byte>();
-        if (!BrotliDecoder.TryDecompress(compressedBytes, dstSpan, out var bytesWritten))
+        if (dst.IsContinuous)
         {
-            throw new InvalidDataException("Failed to decompress Brotli data.");
-        }
+            var dstSpan = dst.GetSpan<byte>();
+            if (!BrotliDecoder.TryDecompress(compressedBytes, dstSpan, out var bytesWritten))
+            {
+                throw new InvalidDataException("Failed to decompress Brotli data.");
+            }
 
-        if (bytesWritten != dstSpan.Length)
+            if (bytesWritten != dstSpan.Length)
+            {
+                throw new InvalidDataException("Brotli decompressed size does not match destination Mat size.");
+            }
+        }
+        else
         {
-            throw new InvalidDataException("Brotli decompressed size does not match destination Mat size.");
+            using var compressedStream = new MemoryStream(compressedBytes, writable: false);
+            using var brotliStream = new BrotliStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
+            for (var row = 0; row < dst.Height; row++)
+            {
+                brotliStream.ReadExactly(dst.GetRowSpanOfBytes(row));
+            }
         }
     }
 }

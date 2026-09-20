@@ -58,6 +58,16 @@ public sealed class MatCompressorDeflate : MatCompressor
     {
         using var compressedStream = new MemoryStream(compressedBytes, writable: false);
         using var deflateStream = new DeflateStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
-        deflateStream.ReadExactly(dst.GetSpan<byte>());
+        if (dst.IsContinuous)
+        {
+            deflateStream.ReadExactly(dst.GetSpan<byte>());
+        }
+        else
+        {
+            for (var row = 0; row < dst.Height; row++)
+            {
+                deflateStream.ReadExactly(dst.GetRowSpanOfBytes(row));
+            }
+        }
     }
 }

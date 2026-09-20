@@ -35,7 +35,7 @@ namespace EmguExtensions;
 /// <summary>
 /// A contour cache for OpenCV
 /// </summary>
-public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, IComparable<EmguContour>, IComparer<EmguContour>
+public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, IComparable<EmguContour>, IComparer<EmguContour>, IEquatable<EmguContour>
 {
     #region Constants
 
@@ -198,6 +198,7 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
         get
         {
             ThrowIfDisposed();
+            if (IsEmpty) return EmguCvExtensions.AnchorCenter;
             return _centroid ??= Moments.M00 == 0 ? EmguCvExtensions.AnchorCenter :
                 new Point(
                     (int)Math.Round(Moments.M10 / Moments.M00),
@@ -233,6 +234,7 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
     /// <param name="leaveOpen">Indicates whether to dispose the vector when the contour is disposed.</param>
     public EmguContour(VectorOfPoint points, bool leaveOpen = true) : base(leaveOpen)
     {
+        ArgumentNullException.ThrowIfNull(points);
         _vector = points;
     }
 
@@ -283,8 +285,16 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
     public Mat ContourApproximation(double epsilon = 0.1)
     {
         var mat = new Mat();
-        CvInvoke.ApproxPolyDP(Vector, mat, epsilon * Perimeter, true);
-        return mat;
+        try
+        {
+            CvInvoke.ApproxPolyDP(Vector, mat, epsilon * Perimeter, true);
+            return mat;
+        }
+        catch
+        {
+            mat.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -317,6 +327,7 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
     /// <returns>The centroid point, or <see cref="EmguCvExtensions.AnchorCenter"/> if the contour is empty or has zero area.</returns>
     public static Point GetCentroid(VectorOfPoint points)
     {
+        ArgumentNullException.ThrowIfNull(points);
         if (points.Length == 0) return EmguCvExtensions.AnchorCenter;
         using var moments = CvInvoke.Moments(points);
         return moments.M00 == 0 ? EmguCvExtensions.AnchorCenter :
@@ -398,13 +409,11 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
         return HashCode.Combine(Count, Vector[0], Vector[lastIndex / 2], Vector[lastIndex]);
     }
 
-    /// <summary>
-    /// Determines whether this contour has the same points as another contour.
-    /// </summary>
-    /// <param name="other">The contour to compare with.</param>
-    /// <returns><see langword="true"/> if all points match; otherwise <see langword="false"/>.</returns>
-    protected bool Equals(EmguContour other)
+    /// <inheritdoc />
+    public bool Equals(EmguContour? other)
     {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
         if (Count != other.Count) return false;
         for (var i = 0; i < Count; i++)
         {
@@ -417,9 +426,9 @@ public class EmguContour : LeaveOpenDisposableObject, IReadOnlyList<Point>, ICom
     /// <inheritdoc />
     public override bool Equals(object? obj)
     {
-        if (ReferenceEquals(null, obj)) return false;
+        if (obj is null) return false;
         if (ReferenceEquals(this, obj)) return true;
-        if (obj.GetType() != this.GetType()) return false;
+        if (obj.GetType() != GetType()) return false;
         return Equals((EmguContour) obj);
     }
 

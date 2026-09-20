@@ -58,6 +58,16 @@ public sealed class MatCompressorZLib : MatCompressor
     {
         using var compressedStream = new MemoryStream(compressedBytes, writable: false);
         using var zLibStream = new ZLibStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
-        zLibStream.ReadExactly(dst.GetSpan<byte>());
+        if (dst.IsContinuous)
+        {
+            zLibStream.ReadExactly(dst.GetSpan<byte>());
+        }
+        else
+        {
+            for (var row = 0; row < dst.Height; row++)
+            {
+                zLibStream.ReadExactly(dst.GetRowSpanOfBytes(row));
+            }
+        }
     }
 }

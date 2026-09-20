@@ -458,3 +458,6 @@ $RECYCLE.BIN/
 
 # nuke
 .nuke/temp/
+
+# AI
+.semgrep/

@@ -72,7 +72,15 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <summary>
     /// Gets or sets the default compressor to be used for material compression operations when no specific compressor is specified, also used for CMat.
     /// </summary>
-    public static MatCompressor DefaultCompressor { get; set; } =
+    public static MatCompressor DefaultCompressor
+    {
+        get => field;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            field = value;
+        }
+    } =
 #if NET11_0_OR_GREATER
         MatCompressorZstd.Instance;
 #else
@@ -150,8 +158,7 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     }
 
     /// <summary>
-    /// Determines the optimal buffer chunk size for compressing the given <see cref="Mat"/>. This method can be overridden by derived classes to provide custom logic for determining the chunk size based on the characteristics of the matrix, such as its dimensions, data type, or memory usage. By default, it returns the minimum of a predefined default chunk size and the total byte length of the matrix data to ensure efficient memory usage during compression.
-    /// </summary>
+    /// Determines the optimal buffer chunk size for compressing the given <see cref="Mat"/>. This method can be overridden by derived classes to provide custom logic for determining the chunk size based on the characteristics of the matrix, such as its dimensions, data type, or memory usage. By default, it returns the minimum of a predefined default chunk size and the total byte length of the matrix data to ensure efficient memory usage during compression.</summary>
     /// <param name="mat">The <see cref="Mat"/> for which to determine the optimal buffer chunk size.</param>
     /// <returns>The optimal buffer chunk size in bytes.</returns>
     protected virtual int GetOptimalBufferChunkSize(Mat mat)
@@ -245,6 +252,7 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     {
         ArgumentNullException.ThrowIfNull(src);
         if (src.IsEmpty) return [];
+        cancellationToken.ThrowIfCancellationRequested();
         ValidateCompressionLevel(compressionLevel);
         return await CompressCoreAsync(src, compressionLevel, cancellationToken).ConfigureAwait(false);
     }
@@ -311,6 +319,8 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     {
         ArgumentNullException.ThrowIfNull(compressedBytes);
         ArgumentNullException.ThrowIfNull(dst);
+        if (compressedBytes.Length == 0) return;
+        cancellationToken.ThrowIfCancellationRequested();
         await DecompressCoreAsync(compressedBytes, dst, cancellationToken).ConfigureAwait(false);
     }
 

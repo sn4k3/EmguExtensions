@@ -63,7 +63,7 @@ public class EmguContourFamily : IReadOnlyList<EmguContourFamily>
         {
             var current = this;
 
-            while (!current.IsExternal)
+            while (current.Parent is not null)
             {
                 current = current.Parent;
             }
@@ -145,6 +145,7 @@ public class EmguContourFamily : IReadOnlyList<EmguContourFamily>
     /// <param name="parent">The parent contour family, or <see langword="null"/> for root contours.</param>
     public EmguContourFamily(int index, int depth, EmguContour self, EmguContourFamily? parent)
     {
+        ArgumentNullException.ThrowIfNull(self);
         Index = index;
         Depth = depth;
         Self = self;
@@ -188,13 +189,20 @@ public class EmguContourFamily : IReadOnlyList<EmguContourFamily>
     public VectorOfVectorOfPoint ToVectorOfVectorOfPoint()
     {
         var contours = new VectorOfVectorOfPoint();
-
-        foreach (var family in TraverseTree())
+        try
         {
-            contours.Push(family.Self.Vector);
-        }
+            foreach (var family in TraverseTree())
+            {
+                contours.Push(family.Self.Vector);
+            }
 
-        return contours;
+            return contours;
+        }
+        catch
+        {
+            contours.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -210,7 +218,11 @@ public class EmguContourFamily : IReadOnlyList<EmguContourFamily>
     /// Adds a child contour to this family node.
     /// </summary>
     /// <param name="child">The child contour family to add.</param>
-    internal void AddChild(EmguContourFamily child) => _children.Add(child);
+    internal void AddChild(EmguContourFamily child)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        _children.Add(child);
+    }
 
     /// <inheritdoc />
     public IEnumerator<EmguContourFamily> GetEnumerator() => _children.GetEnumerator();

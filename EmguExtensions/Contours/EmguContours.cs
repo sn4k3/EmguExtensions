@@ -59,7 +59,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <summary>
     /// Gets the contour hierarchy matrix where each row contains [next, previous, first_child, parent] indices.
     /// </summary>
-    public readonly int[,] Hierarchy;
+    public int[,] Hierarchy { get; }
 
     /// <summary>
     /// Gets the count of external (root-level) contours.
@@ -90,7 +90,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     {
         get
         {
-            if (IsEmpty) return 0;
+            if (Families.Count == 0) return 0;
             if (double.IsNaN(field)) field = Families.Sum(family => family.TotalSolidArea);
             return field;
         }
@@ -104,7 +104,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     {
         get
         {
-            if (IsEmpty) return 0;
+            if (Families.Count == 0) return 0;
             if (double.IsNaN(field)) field = Families.Min(family => family.TotalSolidArea);
             return field;
         }
@@ -118,7 +118,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     {
         get
         {
-            if (IsEmpty) return 0;
+            if (Families.Count == 0) return 0;
             if (double.IsNaN(field)) field = Families.Max(family => family.TotalSolidArea);
             return field;
         }
@@ -133,7 +133,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// </summary>
     /// <param name="points">The contour points as jagged arrays.</param>
     /// <param name="hierarchy">The contour hierarchy matrix.</param>
-    public EmguContours(Point[][] points, int[,] hierarchy) : this(new VectorOfVectorOfPoint(points), hierarchy)
+    public EmguContours(Point[][] points, int[,] hierarchy) : this(new VectorOfVectorOfPoint(points ?? throw new ArgumentNullException(nameof(points))), hierarchy)
     {
     }
 
@@ -145,9 +145,15 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <param name="leaveOpen">If <see langword="true"/>, the <paramref name="vectorOfPointsOfPoints"/> will not be disposed when this instance is disposed.</param>
     public EmguContours(VectorOfVectorOfPoint vectorOfPointsOfPoints, int[,] hierarchy, bool leaveOpen = false) : base(leaveOpen)
     {
+        ArgumentNullException.ThrowIfNull(vectorOfPointsOfPoints);
+        ArgumentNullException.ThrowIfNull(hierarchy);
         Vector = vectorOfPointsOfPoints;
         Hierarchy = hierarchy;
         _contours = new EmguContour[Vector.Size];
+        for (var i = 0; i < _contours.Length; i++)
+        {
+            _contours[i] = new EmguContour(Vector[i]);
+        }
         Families = BuildFamilies();
     }
 
@@ -160,8 +166,14 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <param name="offset">Optional offset applied to every contour point.</param>
     public EmguContours(IInputOutputArray mat, RetrType mode = RetrType.Tree, ChainApproxMethod method = ChainApproxMethod.ChainApproxSimple, Point offset = default)
     {
-        Vector = mat.FindContours(out Hierarchy, mode, method, offset);
+        ArgumentNullException.ThrowIfNull(mat);
+        Vector = mat.FindContours(out var hierarchy, mode, method, offset);
+        Hierarchy = hierarchy;
         _contours = new EmguContour[Vector.Size];
+        for (var i = 0; i < _contours.Length; i++)
+        {
+            _contours[i] = new EmguContour(Vector[i]);
+        }
         Families = BuildFamilies();
     }
 
@@ -193,11 +205,10 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>The constructed family node with all children attached.</returns>
     private EmguContourFamily ArrangeFamily(int contourIndex, int depth, EmguContourFamily? parent)
     {
-        _contours[contourIndex] = new EmguContour(Vector[contourIndex]);
         var family = new EmguContourFamily(contourIndex, depth, _contours[contourIndex], parent);
 
         for (int childIndex = Hierarchy[contourIndex, EmguContour.HierarchyFirstChild];
-             childIndex >= 0;
+             childIndex >= 0 && childIndex < Count;
              childIndex = Hierarchy[childIndex, EmguContour.HierarchyNextSameLevel])
         {
             family.AddChild(ArrangeFamily(childIndex, depth + 1, family));
@@ -288,14 +299,15 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
         var items = new (int Index, EmguContour Contour, double Distance)[Count][];
         for (int i = 0; i < Count; i++)
         {
-            items[i] = new (int Index, EmguContour Contour, double Distance)[includeOwn ? Count : Count - 1];
+            items[i] = new (int Index, EmguContour Contour, double Distance)[includeOwn ? Count : Math.Max(0, Count - 1)];
+            var iCentroid = this[i].Centroid;
             int count = 0;
             for (int x = 0; x < Count; x++)
             {
                 if (x == i && !includeOwn) continue;
 
                 items[i][count] = new(x, this[x],
-                    x == i ? 0 : PointExtensions.FindLength(this[i].Centroid, this[x].Centroid));
+                    x == i ? 0 : PointExtensions.FindLength(iCentroid, this[x].Centroid));
                 count++;
             }
 
@@ -324,7 +336,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
 
         foreach (var contour in _contours)
         {
-            contour.Dispose();
+            contour?.Dispose();
         }
     }
 
@@ -342,22 +354,32 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>A new <see cref="VectorOfVectorOfPoint"/> with the matching contours. The caller is responsible for disposing it.</returns>
     public static VectorOfVectorOfPoint GetContoursInside(VectorOfVectorOfPoint contours, int[,] hierarchy, Point location, bool includeLimitingArea = true)
     {
+        ArgumentNullException.ThrowIfNull(contours);
+        ArgumentNullException.ThrowIfNull(hierarchy);
         var vector = new VectorOfVectorOfPoint();
-        var vectorSize = contours.Size;
-        for (var i = vectorSize - 1; i >= 0; i--)
+        try
         {
-            if (CvInvoke.PointPolygonTest(contours[i], location, false) < 0) continue;
-            vector.Push(contours[i]);
-            if (!includeLimitingArea) break;
-            for (int n = i + 1; n < vectorSize; n++)
+            var vectorSize = contours.Size;
+            for (var i = vectorSize - 1; i >= 0; i--)
             {
-                if (hierarchy[n, EmguContour.HierarchyParent] != i) continue;
-                vector.Push(contours[n]);
+                if (CvInvoke.PointPolygonTest(contours[i], location, false) < 0) continue;
+                vector.Push(contours[i]);
+                if (!includeLimitingArea) break;
+                for (int n = i + 1; n < vectorSize; n++)
+                {
+                    if (hierarchy[n, EmguContour.HierarchyParent] != i) continue;
+                    vector.Push(contours[n]);
+                }
+                break;
             }
-            break;
-        }
 
-        return vector;
+            return vector;
+        }
+        catch
+        {
+            vector.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -369,6 +391,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>The matching <see cref="VectorOfPoint"/>, or <see langword="null"/> if no contour contains the location.</returns>
     public static VectorOfPoint? GetContourInside(VectorOfVectorOfPoint contours, Point location, out int index)
     {
+        ArgumentNullException.ThrowIfNull(contours);
         index = -1;
         var vectorSize = contours.Size;
         for (int i = vectorSize - 1; i >= 0; i--)
@@ -390,15 +413,25 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <remarks>Only compatible with <see cref="RetrType.Tree"/> contour detection mode.</remarks>
     public static VectorOfVectorOfPoint GetExternalContours(VectorOfVectorOfPoint contours, int[,] hierarchy)
     {
+        ArgumentNullException.ThrowIfNull(contours);
+        ArgumentNullException.ThrowIfNull(hierarchy);
         var result = new VectorOfVectorOfPoint();
-        var vectorSize = contours.Size;
-        for (var i = 0; i < vectorSize; i++)
+        try
         {
-            if (hierarchy[i, EmguContour.HierarchyParent] != -1) continue;
-            result.Push(contours[i]);
-        }
+            var vectorSize = contours.Size;
+            for (var i = 0; i < vectorSize; i++)
+            {
+                if (hierarchy[i, EmguContour.HierarchyParent] != -1) continue;
+                result.Push(contours[i]);
+            }
 
-        return result;
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -409,15 +442,25 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>A new <see cref="VectorOfVectorOfPoint"/> containing only child contours. The caller is responsible for disposing it.</returns>
     public static VectorOfVectorOfPoint GetNegativeContours(VectorOfVectorOfPoint contours, int[,] hierarchy)
     {
+        ArgumentNullException.ThrowIfNull(contours);
+        ArgumentNullException.ThrowIfNull(hierarchy);
         var result = new VectorOfVectorOfPoint();
-        var vectorSize = contours.Size;
-        for (var i = 0; i < vectorSize; i++)
+        try
         {
-            if (hierarchy[i, EmguContour.HierarchyParent] == -1) continue;
-            result.Push(contours[i]);
-        }
+            var vectorSize = contours.Size;
+            for (var i = 0; i < vectorSize; i++)
+            {
+                if (hierarchy[i, EmguContour.HierarchyParent] == -1) continue;
+                result.Push(contours[i]);
+            }
 
-        return result;
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -441,6 +484,8 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <remarks>Only compatible with <see cref="RetrType.Tree"/> contour detection mode.</remarks>
     public static List<VectorOfVectorOfPoint> GetPositiveContoursInGroups(VectorOfVectorOfPoint contours, int[,] hierarchy)
     {
+        ArgumentNullException.ThrowIfNull(contours);
+        ArgumentNullException.ThrowIfNull(hierarchy);
         var vectorSize = contours.Size;
         var result = new List<VectorOfVectorOfPoint>();
         var groupsByRoot = new Dictionary<int, VectorOfVectorOfPoint>();
@@ -455,12 +500,16 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
             else
             {
                 int rootIndex = i;
-                while (hierarchy[rootIndex, EmguContour.HierarchyParent] != -1)
+                int hops = 0;
+                while (hierarchy[rootIndex, EmguContour.HierarchyParent] != -1 && hops++ < vectorSize)
                 {
                     rootIndex = hierarchy[rootIndex, EmguContour.HierarchyParent];
                 }
 
-                groupsByRoot[rootIndex].Push(contours[i]);
+                if (groupsByRoot.TryGetValue(rootIndex, out var rootVec))
+                {
+                    rootVec.Push(contours[i]);
+                }
             }
         }
 
@@ -476,9 +525,11 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <remarks>Only compatible with <see cref="RetrType.Tree"/> contour detection mode.</remarks>
     public static List<VectorOfVectorOfPoint> GetNegativeContoursInGroups(VectorOfVectorOfPoint contours, int[,] hierarchy)
     {
+        ArgumentNullException.ThrowIfNull(contours);
+        ArgumentNullException.ThrowIfNull(hierarchy);
         var result = new List<VectorOfVectorOfPoint>();
         var vectorSize = contours.Size;
-        for (int i = 1; i < vectorSize; i++)
+        for (int i = 0; i < vectorSize; i++)
         {
             if (hierarchy[i, EmguContour.HierarchyParent] == -1) continue;
             var vec = new VectorOfVectorOfPoint(contours[i]);
@@ -503,6 +554,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>The net solid area.</returns>
     public static double GetContourArea(VectorOfVectorOfPoint contours)
     {
+        ArgumentNullException.ThrowIfNull(contours);
         var vectorSize = contours.Size;
         if (vectorSize == 0) return 0;
 
@@ -521,6 +573,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>The largest contour area, or 0 if the list is empty.</returns>
     public static double GetLargestContourArea(VectorOfVectorOfPoint contours)
     {
+        ArgumentNullException.ThrowIfNull(contours);
         var vectorSize = contours.Size;
         if (vectorSize == 0) return 0;
 
@@ -540,11 +593,13 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>The largest external contour area, or 0 if the list is empty.</returns>
     public static double GetLargestContourArea(VectorOfVectorOfPoint contours, int[,] hierarchy)
     {
+        ArgumentNullException.ThrowIfNull(contours);
+        ArgumentNullException.ThrowIfNull(hierarchy);
         var vectorSize = contours.Size;
         if (vectorSize == 0) return 0;
 
-        double result = CvInvoke.ContourArea(contours[0]);
-        for (var i = 1; i < vectorSize; i++)
+        double result = 0;
+        for (var i = 0; i < vectorSize; i++)
         {
             if (hierarchy[i, EmguContour.HierarchyParent] != -1) continue;
             result = Math.Max(result, CvInvoke.ContourArea(contours[i]));
@@ -560,6 +615,7 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>An array of areas with the same length as <paramref name="contours"/>.</returns>
     public static double[] GetContoursArea(List<VectorOfVectorOfPoint> contours, bool useParallel = false)
     {
+        ArgumentNullException.ThrowIfNull(contours);
         var result = new double[contours.Count];
 
         if (useParallel)
@@ -588,21 +644,20 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns>The number of intersecting pixels, or 0 if the bounding rectangles do not overlap.</returns>
     public static int ContoursIntersectingPixels(VectorOfVectorOfPoint contour1, VectorOfVectorOfPoint contour2)
     {
+        ArgumentNullException.ThrowIfNull(contour1);
+        ArgumentNullException.ThrowIfNull(contour2);
         if (contour1.Size == 0 || contour2.Size == 0) return 0;
 
         var contour1Rect = CvInvoke.BoundingRectangle(contour1[0]);
         var contour2Rect = CvInvoke.BoundingRectangle(contour2[0]);
 
-        if (!contour1Rect.IntersectsWith(contour2Rect)) return 0;
+        var intersectRect = Rectangle.Intersect(contour1Rect, contour2Rect);
+        if (intersectRect.Width <= 0 || intersectRect.Height <= 0) return 0;
 
-        var totalRect = contour1Rect.Width * contour1Rect.Height <= contour2Rect.Width * contour2Rect.Height
-            ? contour1Rect
-            : contour2Rect;
+        using var contour1Mat = EmguCvExtensions.InitMat(intersectRect.Size);
+        using var contour2Mat = EmguCvExtensions.InitMat(intersectRect.Size);
 
-        using var contour1Mat = EmguCvExtensions.InitMat(totalRect.Size);
-        using var contour2Mat = EmguCvExtensions.InitMat(totalRect.Size);
-
-        var inverseOffset = new Point(-totalRect.X, -totalRect.Y);
+        var inverseOffset = new Point(-intersectRect.X, -intersectRect.Y);
         CvInvoke.DrawContours(contour1Mat, contour1, -1, EmguCvExtensions.WhiteColor, -1, LineType.EightConnected, null, int.MaxValue, inverseOffset);
         CvInvoke.DrawContours(contour2Mat, contour2, -1, EmguCvExtensions.WhiteColor, -1, LineType.EightConnected, null, int.MaxValue, inverseOffset);
 
@@ -619,6 +674,8 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     /// <returns><see langword="true"/> if the contours share at least one pixel; otherwise <see langword="false"/>.</returns>
     public static bool ContoursIntersect(VectorOfVectorOfPoint contour1, VectorOfVectorOfPoint contour2)
     {
+        ArgumentNullException.ThrowIfNull(contour1);
+        ArgumentNullException.ThrowIfNull(contour2);
         return ContoursIntersectingPixels(contour1, contour2) > 0;
     }
 

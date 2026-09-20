@@ -58,6 +58,16 @@ public sealed class MatCompressorGZip : MatCompressor
     {
         using var compressedStream = new MemoryStream(compressedBytes, writable: false);
         using var gZipStream = new GZipStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
-        gZipStream.ReadExactly(dst.GetSpan<byte>());
+        if (dst.IsContinuous)
+        {
+            gZipStream.ReadExactly(dst.GetSpan<byte>());
+        }
+        else
+        {
+            for (var row = 0; row < dst.Height; row++)
+            {
+                gZipStream.ReadExactly(dst.GetRowSpanOfBytes(row));
+            }
+        }
     }
 }
