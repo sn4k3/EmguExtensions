@@ -232,6 +232,7 @@ public static partial class EmguCvExtensions
             MCvScalar color, int thickness = 1, int lineGapOffset = 0, LineType lineType = LineType.EightConnected,
             bool bottomLeftOrigin = false, PutTextLineAlignment lineAlignment = default)
         {
+            ArgumentNullException.ThrowIfNull(text);
             text = text.TrimEnd('\n', '\r', ' ');
             var lines = text.Split(StaticObjects.LineBreakCharacters, StringSplitOptions.None);
 
@@ -244,10 +245,20 @@ public static partial class EmguCvExtensions
 
             // Get height of a single line in pixels (all lines share the same height)
             var baseLine = 0;
-            var firstNonEmptyLine = Array.Find(lines, l => !string.IsNullOrWhiteSpace(l)) ?? lines[0];
+            var firstNonEmptyLine = lines[0];
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(lines[i]))
+                {
+                    firstNonEmptyLine = lines[i];
+                    break;
+                }
+            }
             var textSize = CvInvoke.GetTextSize(firstNonEmptyLine, fontFace, fontScale, thickness, ref baseLine);
             var lineGap = textSize.Height / 3 + lineGapOffset;
-            var linesSize = new Size[lines.Length];
+            var linesSize = (lineAlignment is not PutTextLineAlignment.Left and not PutTextLineAlignment.Default)
+                ? new Size[lines.Length]
+                : [];
             var width = 0;
 
             // Sanitize lines
@@ -638,6 +649,7 @@ public static partial class EmguCvExtensions
         /// <param name="dst">The destination matrix to paste the source into.</param>
         public void CopyToCenter(Mat dst)
         {
+            ArgumentNullException.ThrowIfNull(dst);
             if (src.Size == dst.Size)
             {
                 src.CopyTo(dst);
@@ -1150,8 +1162,10 @@ public static partial class EmguCvExtensions
         /// <returns>A 2D memory representing the matrix data.</returns>
         public Memory2D<T> GetMemory2D<T>() where T : unmanaged
         {
+            if (src.IsEmpty || src.Height <= 0) return Memory2D<T>.Empty;
             var sizeOfT = Unsafe.SizeOf<T>();
             var width = src.RealStep / sizeOfT;
+            if (width <= 0) return Memory2D<T>.Empty;
             var rowStep = src.Step / sizeOfT;
             var pitch = rowStep - width;
             var managerLength = (src.Height - 1) * rowStep + width;
@@ -1188,8 +1202,10 @@ public static partial class EmguCvExtensions
         /// <returns>A 2D read-only memory representing the matrix data.</returns>
         public ReadOnlyMemory2D<T> GetReadOnlyMemory2D<T>() where T : unmanaged
         {
+            if (src.IsEmpty || src.Height <= 0) return ReadOnlyMemory2D<T>.Empty;
             var sizeOfT = Unsafe.SizeOf<T>();
             var width = src.RealStep / sizeOfT;
+            if (width <= 0) return ReadOnlyMemory2D<T>.Empty;
             var rowStep = src.Step / sizeOfT;
             var pitch = rowStep - width;
             var managerLength = (src.Height - 1) * rowStep + width;
@@ -1226,10 +1242,11 @@ public static partial class EmguCvExtensions
         /// </exception>
         public Memory2D<T> GetMemory2D<T>(Rectangle roi) where T : unmanaged
         {
-            if (!ValidateRoi(src, roi)) return Memory2D<T>.Empty;
+            if (roi.Width <= 0 || roi.Height <= 0 || !ValidateRoi(src, roi)) return Memory2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
+            if (roiWidth <= 0) return Memory2D<T>.Empty;
             var rowStep = src.Step / sizeOfT;
             var pitch = rowStep - roiWidth;
             var managerLength = (roi.Height - 1) * rowStep + roiWidth;
@@ -1270,10 +1287,11 @@ public static partial class EmguCvExtensions
         /// </exception>
         public ReadOnlyMemory2D<T> GetReadOnlyMemory2D<T>(Rectangle roi) where T : unmanaged
         {
-            if (!ValidateRoi(src, roi)) return ReadOnlyMemory2D<T>.Empty;
+            if (roi.Width <= 0 || roi.Height <= 0 || !ValidateRoi(src, roi)) return ReadOnlyMemory2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
+            if (roiWidth <= 0) return ReadOnlyMemory2D<T>.Empty;
             var rowStep = src.Step / sizeOfT;
             var pitch = rowStep - roiWidth;
             var managerLength = (roi.Height - 1) * rowStep + roiWidth;
@@ -1427,7 +1445,7 @@ public static partial class EmguCvExtensions
             where T : struct, IComparisonOperators<T, T, bool>
         {
             if (length <= 0 || value < valueMinThreshold) return; // Ignore threshold (mostly if blacks), spare cycles
-            src.GetSpan<T>(length, src.GetPixelPos(x, y)).Fill(value);
+            src.GetSpan<T>(length, src.GetPixelPos(x, y) / Unsafe.SizeOf<T>()).Fill(value);
         }
 
         /// <summary>
@@ -1637,6 +1655,12 @@ public static partial class EmguCvExtensions
             if (!boundingRectangle.IsEmpty && (padLeft != 0 || padTop != 0 || padRight != 0 || padBottom != 0))
             {
                 src.ConstrainRoi(ref boundingRectangle, EmptyRoiBehavior.Default, padLeft, padTop, padRight, padBottom);
+            }
+
+            if (boundingRectangle.Width <= 0 || boundingRectangle.Height <= 0)
+            {
+                boundingRectangle = Rectangle.Empty;
+                return new Mat();
             }
 
             return new Mat(src, boundingRectangle);
@@ -1909,24 +1933,13 @@ public static partial class EmguCvExtensions
             var length = src.ByteCountInt32;
             if (length == 0) return [];
             var copy = GC.AllocateUninitializedArray<byte>(length);
-            src.CopyTo(copy);
-
-            /*
-            var destination = copy.AsSpan();
             if (src.IsContinuous)
             {
-                src.GetReadOnlySpanOfBytes().CopyTo(destination);
+                src.GetReadOnlySpanOfBytes().CopyTo(copy);
                 return copy;
             }
 
-            var offset = 0;
-            for (var row = 0; row < src.Height; row++)
-            {
-                var sourceRow = src.GetReadOnlyRowSpanOfBytes(row);
-                sourceRow.CopyTo(destination[offset..]);
-                offset += sourceRow.Length;
-            }
-            */
+            src.CopyTo(copy);
             return copy;
         }
 
@@ -1942,7 +1955,7 @@ public static partial class EmguCvExtensions
         /// <returns>Pixel position in the span, or -1 if not found</returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstNegativePixel<T>(int startPos = 0, int length = 0)
-            where T : struct, INumber<T>, IMinMaxValue<T>
+            where T : struct, IBinaryInteger<T>, IMinMaxValue<T>
         {
             return src.FindFirstPixelEqualTo(T.Zero, startPos, length);
         }
@@ -1955,7 +1968,7 @@ public static partial class EmguCvExtensions
         /// <returns>Pixel position in the span, or -1 if not found</returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPositivePixel<T>(int startPos = 0, int length = 0)
-            where T : struct, INumber<T>, IMinMaxValue<T>
+            where T : struct, IBinaryInteger<T>, IMinMaxValue<T>
         {
             return src.FindFirstPixelGreaterThan(T.Zero, startPos, length);
         }
@@ -1984,7 +1997,7 @@ public static partial class EmguCvExtensions
         /// <returns>Pixel position in the span, or -1 if not found</returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelLessThan<T>(T value, int startPos = 0, int length = 0)
-            where T : struct, INumber<T>, IMinMaxValue<T>
+            where T : struct, IBinaryInteger<T>, IMinMaxValue<T>
         {
             if (value == T.MinValue) return -1;
             var span = src.GetReadOnlySpan<T>(length, startPos);
@@ -2001,7 +2014,7 @@ public static partial class EmguCvExtensions
         /// <returns>Pixel position in the span, or -1 if not found</returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelEqualOrLessThan<T>(T value, int startPos = 0, int length = 0)
-            where T : struct, INumber<T>, IMinMaxValue<T>
+            where T : struct, IBinaryInteger<T>, IMinMaxValue<T>
         {
             var span = src.GetReadOnlySpan<T>(length, startPos);
             var found = span.IndexOfAnyInRange(T.MinValue, value);
@@ -2017,7 +2030,7 @@ public static partial class EmguCvExtensions
         /// <returns>Pixel position in the span, or -1 if not found</returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelGreaterThan<T>(T value, int startPos = 0, int length = 0)
-            where T : struct, INumber<T>, IMinMaxValue<T>
+            where T : struct, IBinaryInteger<T>, IMinMaxValue<T>
         {
             if (value == T.MaxValue) return -1;
             var span = src.GetReadOnlySpan<T>(length, startPos);
@@ -2034,7 +2047,7 @@ public static partial class EmguCvExtensions
         /// <returns>Pixel position in the span, or -1 if not found</returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
         public int FindFirstPixelEqualOrGreaterThan<T>(T value, int startPos = 0, int length = 0)
-            where T : struct, INumber<T>, IMinMaxValue<T>
+            where T : struct, IBinaryInteger<T>, IMinMaxValue<T>
         {
             var span = src.GetReadOnlySpan<T>(length, startPos);
             var found = span.IndexOfAnyInRange(value, T.MaxValue);
@@ -2615,28 +2628,42 @@ public static partial class EmguCvExtensions
         /// <param name="dst">Destination image to receive the copied areas.</param>
         public void CopyAreasSmallerThan(double threshold, Mat dst)
         {
+            ArgumentNullException.ThrowIfNull(dst);
             if (threshold <= 1) return;
             using var contours = src.FindContours(out var hierarchy, RetrType.Tree);
             var contourGroups = EmguContours.GetContoursInGroups(contours, hierarchy);
 
-            var mask = src.NewZeros();
-            uint drawContours = 0;
-            foreach (var contourGroup in contourGroups)
+            try
             {
-                using var selectedContours = new VectorOfVectorOfPoint();
-                foreach (var group in contourGroup)
+                using var mask = src.NewZeros();
+                uint drawContours = 0;
+                foreach (var contourGroup in contourGroups)
                 {
-                    var area = EmguContours.GetContourArea(group);
-                    if (area >= threshold) continue;
-                    drawContours++;
-                    selectedContours.Push(group);
+                    using var selectedContours = new VectorOfVectorOfPoint();
+                    foreach (var group in contourGroup)
+                    {
+                        var area = EmguContours.GetContourArea(group);
+                        if (area >= threshold) continue;
+                        drawContours++;
+                        selectedContours.Push(group);
+                    }
+
+                    if (selectedContours.Size == 0) continue;
+                    CvInvoke.DrawContours(mask, selectedContours, -1, WhiteColor, -1);
                 }
 
-                if (selectedContours.Size == 0) continue;
-                CvInvoke.DrawContours(mask, selectedContours, -1, WhiteColor, -1);
+                if (drawContours > 0) src.CopyTo(dst, mask);
             }
-
-            if (drawContours > 0) src.CopyTo(dst, mask);
+            finally
+            {
+                foreach (var groupList in contourGroups)
+                {
+                    foreach (var vec in groupList)
+                    {
+                        vec.Dispose();
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -2646,28 +2673,42 @@ public static partial class EmguCvExtensions
         /// <param name="dst">Destination image to receive the copied areas.</param>
         public void CopyAreasLargerThan(double threshold, Mat dst)
         {
+            ArgumentNullException.ThrowIfNull(dst);
             if (threshold <= 0) return;
             using var contours = src.FindContours(out var hierarchy, RetrType.Tree);
             var contourGroups = EmguContours.GetContoursInGroups(contours, hierarchy);
 
-            var mask = src.NewZeros();
-            uint drawContours = 0;
-            foreach (var contourGroup in contourGroups)
+            try
             {
-                using var selectedContours = new VectorOfVectorOfPoint();
-                foreach (var group in contourGroup)
+                using var mask = src.NewZeros();
+                uint drawContours = 0;
+                foreach (var contourGroup in contourGroups)
                 {
-                    var area = EmguContours.GetContourArea(group);
-                    if (area <= threshold) continue;
-                    drawContours++;
-                    selectedContours.Push(group);
+                    using var selectedContours = new VectorOfVectorOfPoint();
+                    foreach (var group in contourGroup)
+                    {
+                        var area = EmguContours.GetContourArea(group);
+                        if (area <= threshold) continue;
+                        drawContours++;
+                        selectedContours.Push(group);
+                    }
+
+                    if (selectedContours.Size == 0) continue;
+                    CvInvoke.DrawContours(mask, selectedContours, -1, WhiteColor, -1);
                 }
 
-                if (selectedContours.Size == 0) continue;
-                CvInvoke.DrawContours(mask, selectedContours, -1, WhiteColor, -1);
+                if (drawContours > 0) src.CopyTo(dst, mask);
             }
-
-            if (drawContours > 0) src.CopyTo(dst, mask);
+            finally
+            {
+                foreach (var groupList in contourGroups)
+                {
+                    foreach (var vec in groupList)
+                    {
+                        vec.Dispose();
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -2732,7 +2773,8 @@ public static partial class EmguCvExtensions
                     {
                         // Cache the inner contour to avoid repeated native interop indexer calls
                         var contour = contours[i];
-                        if (contour.Size == 0) continue;
+                        var points = contour.ToArray();
+                        if (points.Length == 0) continue;
 
                         if (hierarchy[i, EmguContour.HierarchyParent] == -1) // Top hierarchy
                         {
@@ -2747,21 +2789,20 @@ public static partial class EmguCvExtensions
                             buffer.Add(' ');
                         }
 
-                        var firstPoint = contour[0];
+                        var firstPoint = points[0];
                         buffer.Add('M');
                         buffer.Add(' ');
-                        buffer.Format(firstPoint.X);
+                        buffer.Write($"{firstPoint.X}");
                         buffer.Add(' ');
-                        buffer.Format(firstPoint.Y);
+                        buffer.Write($"{firstPoint.Y}");
                         buffer.Write(" L");
-                        var contourSize = contour.Size;
-                        for (var x = 1; x < contourSize; x++)
+                        for (var x = 1; x < points.Length; x++)
                         {
-                            var pt = contour[x];
+                            var pt = points[x];
                             buffer.Add(' ');
-                            buffer.Format(pt.X);
+                            buffer.Write($"{pt.X}");
                             buffer.Add(' ');
-                            buffer.Format(pt.Y);
+                            buffer.Write($"{pt.Y}");
                         }
 
                         buffer.Write(" Z");
@@ -2825,6 +2866,9 @@ public static partial class EmguCvExtensions
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(targetWidth);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(targetHeight);
 
+            if (src.IsEmpty || src.Width <= 0 || src.Height <= 0)
+                throw new InvalidOperationException("Cannot create a letterbox from an empty or uninitialized Mat.");
+
             var originalSize = src.Size;
             var targetSize = new Size(targetWidth, targetHeight);
 
@@ -2851,14 +2895,22 @@ public static partial class EmguCvExtensions
 
             // Create padded image
             var letterboxed = new Mat(targetSize, src.Depth, src.NumberOfChannels);
-            letterboxed.SetTo(paddingColor); // color padding
+            try
+            {
+                letterboxed.SetTo(paddingColor); // color padding
 
-            // Copy resized image to center of letterboxed image
-            var roi = new Rectangle(padX, padY, newWidth, newHeight);
-            using var roiMat = letterboxed.SafeRoi(ref roi);
-            resized.CopyTo(roiMat);
+                // Copy resized image to center of letterboxed image
+                var roi = new Rectangle(padX, padY, newWidth, newHeight);
+                using var roiMat = letterboxed.SafeRoi(ref roi);
+                resized.CopyTo(roiMat);
 
-            return letterboxed;
+                return letterboxed;
+            }
+            catch
+            {
+                letterboxed.Dispose();
+                throw;
+            }
         }
 
         /// <summary>
@@ -3471,7 +3523,7 @@ public static partial class EmguCvExtensions
         public Mat Skeletonize(Size ksize = default, MorphShapes elementShape = MorphShapes.Rectangle,
             CancellationToken cancellationToken = default)
         {
-            if (ksize.IsEmpty) ksize = new Size(3, 3);
+            if (ksize.Width <= 0 || ksize.Height <= 0) ksize = new Size(3, 3);
             var skeleton = src.NewZeros();
             if (src.IsAllZero) return skeleton;
 
@@ -3495,14 +3547,19 @@ public static partial class EmguCvExtensions
 
                     (current, eroded) = (eroded, current);
                 }
+
+                return skeleton;
+            }
+            catch
+            {
+                skeleton.Dispose();
+                throw;
             }
             finally
             {
                 current.Dispose();
                 eroded.Dispose();
             }
-
-            return skeleton;
         }
 
 

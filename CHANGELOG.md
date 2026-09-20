@@ -1,3 +1,25 @@
+# v0.1.10 (20/09/2026)
+
+- `EmguCvExtensions`:
+  - Fix element offset calculation in `FillSpan<T>` for multi-byte types (`sizeof(T) > 1`)
+  - Enable continuous memory fast-path in `ToArray` using direct span copy
+  - Fix empty and non-positive dimension checks in `GetMemory2D`, `GetReadOnlyMemory2D`, `InitMat`, and `RoiFromBoundingRectangle`
+  - Ensure unmanaged matrix disposal on exceptions in `CreateLetterBox` and `Skeletonize`
+  - Fix native memory leak in `CopyAreasSmallerThan` and `CopyAreasLargerThan` by disposing contour group vectors in `finally` blocks
+  - Optimize `GetSvgPath` by caching contour point arrays to avoid per-vertex P/Invoke calls
+  - Eliminate closure allocations in `GetTextSizeExtended` and `PutTextExtended`, and allocate `linesSize` only for non-left text alignments
+  - Align generic type constraints on `FindFirst*Pixel*` methods to `IBinaryInteger<T>, IMinMaxValue<T>`
+  - Add missing `ArgumentNullException.ThrowIfNull` guards across public APIs
+- `CMat`:
+  - Fix ROI zero-dimension checks in `UncompressedLength`, `Compress(MatRoi)`, and `Decompress`
+  - Ensure unmanaged matrix disposal on decompression failure in `RawDecompressInternal`
+  - Add rollback safety in `ChangeCompressor` to preserve original dimensions and ROI if re-encoding fails
+  - Improve `GetHashCode` to incorporate matrix dimensions, channels, and ROI
+  - Add argument null checks on constructors and public methods
+- Add regression tests covering all audited extensions and edge cases
+- Modernize DevSkim GitHub Actions workflow (`microsoft/DevSkim-Action@v1`)
+- Bump dependencies
+
 # v0.1.9 (24/07/2026)
 
 - Add `EmguCvExtensions.CreateVector` to wrap a byte buffer in a Mat

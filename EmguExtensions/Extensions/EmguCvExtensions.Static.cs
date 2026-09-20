@@ -121,7 +121,15 @@ public static partial class EmguCvExtensions
         ArgumentNullException.ThrowIfNull(text);
         text = text.TrimEnd('\n', '\r', ' ');
         var lines = text.Split(StaticObjects.LineBreakCharacters, StringSplitOptions.None);
-        var firstNonEmpty = Array.Find(lines, l => !string.IsNullOrWhiteSpace(l)) ?? lines[0];
+        var firstNonEmpty = lines[0];
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(lines[i]))
+            {
+                firstNonEmpty = lines[i];
+                break;
+            }
+        }
         var textSize = CvInvoke.GetTextSize(firstNonEmpty, fontFace, fontScale, thickness, ref baseLine);
 
         if (lines.Length is 0 or 1) return textSize;
@@ -153,7 +161,7 @@ public static partial class EmguCvExtensions
     /// <returns></returns>
     public static Mat InitMat(Size size, int channels = 1, DepthType depthType = DepthType.Cv8U)
     {
-        return size.IsEmpty ? new Mat() : Mat.Zeros(size.Height, size.Width, depthType, channels);
+        return size.Width <= 0 || size.Height <= 0 ? new Mat() : Mat.Zeros(size.Height, size.Width, depthType, channels);
     }
 
     /// <summary>
@@ -168,7 +176,7 @@ public static partial class EmguCvExtensions
     public static Mat InitMat(Size size, MCvScalar color, int channels = 1, DepthType depthType = DepthType.Cv8U,
         IInputArray? mask = null)
     {
-        if (size.IsEmpty) return new Mat();
+        if (size.Width <= 0 || size.Height <= 0) return new Mat();
         var mat = new Mat(size, depthType, channels);
         try
         {
@@ -222,7 +230,12 @@ public static partial class EmguCvExtensions
     /// <param name="buffer">The span of bytes to create the Mat from.</param>
     /// <returns>A new Mat initialized with the data from the span.</returns>
     /// <exception cref="ArgumentException">Thrown if the span is empty.</exception>
-    /// <remarks>All manipulations on the returned <see cref="Mat"/> will reflect in the original buffer.</remarks>
+    /// <remarks>
+    /// WARNING: This method returns a <see cref="Mat"/> pointing directly to the memory of <paramref name="buffer"/>.
+    /// If the buffer is backed by managed memory (e.g., an unpinned byte array), it must remain fixed/pinned in memory
+    /// for the lifetime of the returned <see cref="Mat"/> to prevent memory corruption.
+    /// All manipulations on the returned <see cref="Mat"/> will reflect in the original buffer.
+    /// </remarks>
     public static Mat CreateVector(ReadOnlySpan<byte> buffer)
     {
         if (buffer.IsEmpty)
