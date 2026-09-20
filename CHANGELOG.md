@@ -1,13 +1,16 @@
-# v0.1.10 (20/09/2026)
+# v0.2.0 (20/09/2026)
 
 - `EmguCvExtensions`:
   - Fix element offset calculation in `FillSpan<T>` for multi-byte types (`sizeof(T) > 1`)
   - Enable continuous memory fast-path in `ToArray` using direct span copy
-  - Fix empty and non-positive dimension checks in `GetMemory2D`, `GetReadOnlyMemory2D`, `InitMat`, and `RoiFromBoundingRectangle`
+  - Fix empty and non-positive dimension checks in `GetMemory2D`, `GetReadOnlyMemory2D`, `InitMat`, and
+    `RoiFromBoundingRectangle`
   - Ensure unmanaged matrix disposal on exceptions in `CreateLetterBox` and `Skeletonize`
-  - Fix native memory leak in `CopyAreasSmallerThan` and `CopyAreasLargerThan` by disposing contour group vectors in `finally` blocks
+  - Fix native memory leak in `CopyAreasSmallerThan` and `CopyAreasLargerThan` by disposing contour group vectors in
+    `finally` blocks
   - Optimize `GetSvgPath` by caching contour point arrays to avoid per-vertex P/Invoke calls
-  - Eliminate closure allocations in `GetTextSizeExtended` and `PutTextExtended`, and allocate `linesSize` only for non-left text alignments
+  - Eliminate closure allocations in `GetTextSizeExtended` and `PutTextExtended`, and allocate `linesSize` only for
+    non-left text alignments
   - Align generic type constraints on `FindFirst*Pixel*` methods to `IBinaryInteger<T>, IMinMaxValue<T>`
   - Add missing `ArgumentNullException.ThrowIfNull` guards across public APIs
 - `CMat`:
@@ -17,17 +20,21 @@
   - Improve `GetHashCode` to incorporate matrix dimensions, channels, and ROI
   - Add argument null checks on constructors and public methods
 - `MatCompressor` & Subclasses:
-  - Add non-continuous destination `Mat` (e.g. ROI submatrix) decompression support across `Brotli`, `Deflate`, `GZip`, `ZLib`, and `Zstd` compressors via row-by-row streaming into `dst.GetRowSpanOfBytes(row)`
+  - Add non-continuous destination `Mat` (e.g. ROI submatrix) decompression support across `Brotli`, `Deflate`, `GZip`,
+    `ZLib`, and `Zstd` compressors via row-by-row streaming into `dst.GetRowSpanOfBytes(row)`
   - Add null validation guard to `MatCompressor.DefaultCompressor` property setter
   - Add empty byte array guard and cancellation token checking in `DecompressAsync` and `CompressAsync`
   - Clean up unused constants and use `ArgumentOutOfRangeException` in `MatCompressorBrotli`
 - `EmguContours`, `EmguContour`, `EmguContourFamily`:
-  - Fix bug in `EmguContours.GetLargestContourArea(VectorOfVectorOfPoint, int[,])` where contour index 0 was unconditionally assigned
+  - Fix bug in `EmguContours.GetLargestContourArea(VectorOfVectorOfPoint, int[,])` where contour index 0 was
+    unconditionally assigned
   - Fix `InvalidOperationException` in `MinSolidArea` and `MaxSolidArea` when `Families` is empty
-  - Optimize `ContoursIntersectingPixels` to rasterize only the intersection bounding box `Rectangle.Intersect` instead of the full contour bounding box
+  - Optimize `ContoursIntersectingPixels` to rasterize only the intersection bounding box `Rectangle.Intersect` instead
+    of the full contour bounding box
   - Optimize `CalculateCentroidDistances` by caching contour centroid outside the inner comparison loop
   - Pre-populate `_contours` array upfront in constructors to prevent null or unassigned elements
-  - Implement `IEquatable<EmguContour>` and check `IsEmpty` in `EmguContour.Centroid` to avoid P/Invoke on empty contours
+  - Implement `IEquatable<EmguContour>` and check `IsEmpty` in `EmguContour.Centroid` to avoid P/Invoke on empty
+    contours
   - Ensure unmanaged matrix disposal on exception in `ContourApproximation` and `ToVectorOfVectorOfPoint`
   - Fix `EmguContourFamily.Root` traversal to handle non-zero external depth roots safely
   - Add argument null validation guards across all public contour APIs
