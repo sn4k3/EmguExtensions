@@ -9,6 +9,10 @@ on:
         default: true
         type: boolean
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   extract_information:
     name: '🔍 Extract release information'
@@ -23,62 +27,88 @@ jobs:
       contents: write
       packages: write
     steps:
-      # 🛒 Checkout the repository
+      # 🛒 Checkout the repository (fetch-depth: 0 ensures tags and history are available)
       - name: 🛒 Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 🟣 Setup .NET
+      # 🟣 Setup .NET with package restore caching
       - name: 🟣 Setup .NET 10.0
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
-      # 📦 Pack the project
+      # 📦 Pack the projects into an isolated directory
       - name: 📦 Pack
-        run: dotnet pack --configuration Release --output .
+        run: dotnet pack --configuration Release --output ./nupkgs
+
+      # 📤 Upload packages as workflow artifact (available for inspection in dry-run and release)
+      - name: 📤 Upload NuGet packages as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages-v${{ needs.extract_information.outputs.version }}
+          path: ./nupkgs/*
+          if-no-files-found: error
+          retention-days: 7
 
       # 🏷️ Create a Git tag
       - name: 🏷️ Create Git tag
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !inputs.dry_run }}
+        env:
+          VERSION: ${{ needs.extract_information.outputs.version }}
         run: |
-          version="${{ needs.extract_information.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git rev-parse "$version" >/dev/null 2>&1; then
-            echo "Tag $version already exists, skipping."
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists, skipping."
           else
-            git tag -a "$version" -m "Release v$version"
-            git push origin "$version"
+            git tag -a "$VERSION" -m "Release v$VERSION"
+            git push origin "$VERSION"
           fi
 
       # 🚀 Push to nuget.org
       - name: 🚀 Push nuget.org
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !inputs.dry_run }}
         env:
           NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
-        run: dotnet nuget push *.nupkg --source https://api.nuget.org/v3/index.json --api-key ${NUGET_TOKEN} --skip-duplicate
+        run: dotnet nuget push ./nupkgs/*.nupkg --source https://api.nuget.org/v3/index.json --api-key "$NUGET_TOKEN" --skip-duplicate
 
       # 🚀 Push to GitHub Packages
-      - name: 🚀 Push Github
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: dotnet nuget push *.nupkg --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key ${{ github.token }} --skip-duplicate
+      - name: 🚀 Push GitHub Packages
+        if: ${{ !inputs.dry_run }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: dotnet nuget push ./nupkgs/*.nupkg --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key "$GITHUB_TOKEN" --skip-duplicate
 
-      # 📝 Create GitHub release
+      # 📝 Create GitHub release and attach packages
       - name: 📝 Create GitHub release
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !inputs.dry_run }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "${{ env.Version }}"
-          name: "v${{ env.Version }}"
-          body: ${{ env.Changelog }}
+          tag_name: ${{ needs.extract_information.outputs.version }}
+          name: v${{ needs.extract_information.outputs.version }}
+          body: ${{ needs.extract_information.outputs.changelog }}
+          files: ./nupkgs/*
           draft: false
-          prerelease: ${{ contains(env.Version, '-alpha') || contains(env.Version, '-beta') || contains(env.Version, '-preview') || contains(env.Version, '-rc') }}
+          prerelease: ${{ contains(needs.extract_information.outputs.version, '-alpha') || contains(needs.extract_information.outputs.version, '-beta') || contains(needs.extract_information.outputs.version, '-preview') || contains(needs.extract_information.outputs.version, '-rc') }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          Version: ${{ needs.extract_information.outputs.version }}
-          Changelog: ${{ needs.extract_information.outputs.changelog }}
+          GITHUB_TOKEN: ${{ github.token }}
 
-      # Show dry run message if enabled
-      - name: 🛑 Dry run notice
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: echo "Dry run completed. Package was built but not published."
+      # 📊 Output workflow execution summary
+      - name: 📊 Workflow summary
+        if: always()
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "### ⚠️ Dry Run Completed" >> $GITHUB_STEP_SUMMARY
+            echo "Packages were built and archived as an artifact for version **${{ needs.extract_information.outputs.version }}**." >> $GITHUB_STEP_SUMMARY
+            echo "No Git tags, GitHub releases, or package registries were updated." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### 🚀 Release v${{ needs.extract_information.outputs.version }} Published!" >> $GITHUB_STEP_SUMMARY
+            echo "- **Git Tag:** \`${{ needs.extract_information.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **NuGet.org:** Published" >> $GITHUB_STEP_SUMMARY
+            echo "- **GitHub Packages:** Published" >> $GITHUB_STEP_SUMMARY
+            echo "- **GitHub Release:** Created with attached assets" >> $GITHUB_STEP_SUMMARY
+          fi
