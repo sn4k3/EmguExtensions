@@ -64,6 +64,11 @@ public static partial class EmguCvExtensions
     /// <summary>
     /// Gets a structuring element (kernel) of size 3x3 with a rectangular shape, which is commonly used in morphological operations such as dilation and erosion. The anchor point is set to the center of the kernel.
     /// </summary>
+    /// <remarks>
+    /// This is a single instance shared by the whole process and it is created lazily on first access.
+    /// It must be treated as read-only: do NOT dispose it (do not put it in a <c>using</c>) and do not modify its content,
+    /// otherwise every other consumer is affected. Call <see cref="Mat.Clone"/> to get a private copy when ownership is needed.
+    /// </remarks>
     public static Mat Kernel3X3Rectangle => Kernel3X3RectangleLazy.Value;
 
     /// <summary>

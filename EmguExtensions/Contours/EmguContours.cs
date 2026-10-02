@@ -567,6 +567,31 @@ public class EmguContours : LeaveOpenDisposableObject, IReadOnlyList<EmguContour
     }
 
     /// <summary>
+    /// Calculates the effective area of a contour group produced by <see cref="GetContoursInGroups"/> from a <see cref="RetrType.Tree"/> scan:
+    /// the root contour, minus its holes, plus the islands inside those holes (and so on, at any depth).
+    /// </summary>
+    /// <remarks>
+    /// OpenCV orients contours alternately by depth (outer boundaries one way, hole boundaries the other), so the oriented
+    /// areas are summed and normalized to the sign of the root. <see cref="GetContourArea"/> cannot be used for this as it always subtracts.
+    /// </remarks>
+    /// <param name="group">A contour group where the first element is the root contour.</param>
+    /// <returns>The net area of the group.</returns>
+    internal static double GetContourGroupArea(VectorOfVectorOfPoint group)
+    {
+        var vectorSize = group.Size;
+        if (vectorSize == 0) return 0;
+
+        var rootArea = CvInvoke.ContourArea(group[0], true);
+        var sum = rootArea;
+        for (var i = 1; i < vectorSize; i++)
+        {
+            sum += CvInvoke.ContourArea(group[i], true);
+        }
+
+        return rootArea < 0 ? -sum : sum;
+    }
+
+    /// <summary>
     /// Gets the largest individual contour area from a contour list.
     /// </summary>
     /// <param name="contours">The contour vectors to evaluate.</param>

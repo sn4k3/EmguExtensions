@@ -23,7 +23,9 @@
  */
 
 using System.Drawing;
+using System.Globalization;
 using System.Runtime.CompilerServices;
+using DotNext.Buffers;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
@@ -38,23 +40,31 @@ public static partial class EmguCvExtensions
         int elementSize,
         int length,
         int offset,
-        out int byteOffset)
+        out int byteOffset
+    )
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         ArgumentOutOfRangeException.ThrowIfNegative(offset);
 
         var availableElements = byteLength / elementSize;
         if (offset > availableElements)
-            throw new ArgumentOutOfRangeException(nameof(offset), offset,
-                $"Offset must not exceed the available element count ({availableElements}).");
+            throw new ArgumentOutOfRangeException(
+                nameof(offset),
+                offset,
+                $"Offset must not exceed the available element count ({availableElements})."
+            );
 
         byteOffset = offset * elementSize;
         var remainingElements = (byteLength - byteOffset) / elementSize;
 
-        if (length == 0) return remainingElements;
+        if (length == 0)
+            return remainingElements;
         if (length > remainingElements)
-            throw new ArgumentOutOfRangeException(nameof(length), length,
-                $"Length must not exceed the remaining element count ({remainingElements}).");
+            throw new ArgumentOutOfRangeException(
+                nameof(length),
+                length,
+                $"Length must not exceed the remaining element count ({remainingElements})."
+            );
 
         return length;
     }
@@ -66,7 +76,8 @@ public static partial class EmguCvExtensions
     /// <returns></returns>
     public static int CorrectThickness(int thickness)
     {
-        if (thickness < 3) return thickness;
+        if (thickness < 3)
+            return thickness;
         return thickness - 1;
     }
 
@@ -83,8 +94,10 @@ public static partial class EmguCvExtensions
         return lineAlignment switch
         {
             PutTextLineAlignment.Default => line.TrimEnd(),
-            PutTextLineAlignment.Left or PutTextLineAlignment.Center or PutTextLineAlignment.Right => line.Trim(),
-            _ => throw new ArgumentOutOfRangeException(nameof(lineAlignment), lineAlignment, null)
+            PutTextLineAlignment.Left
+            or PutTextLineAlignment.Center
+            or PutTextLineAlignment.Right => line.Trim(),
+            _ => throw new ArgumentOutOfRangeException(nameof(lineAlignment), lineAlignment, null),
         };
     }
 
@@ -98,10 +111,24 @@ public static partial class EmguCvExtensions
     /// <param name="baseLine">The baseline of the text.</param>
     /// <param name="lineAlignment">The alignment option for the text.</param>
     /// <returns></returns>
-    public static Size GetTextSizeExtended(string text, FontFace fontFace, double fontScale, int thickness,
-        ref int baseLine, PutTextLineAlignment lineAlignment = default)
+    public static Size GetTextSizeExtended(
+        string text,
+        FontFace fontFace,
+        double fontScale,
+        int thickness,
+        ref int baseLine,
+        PutTextLineAlignment lineAlignment = default
+    )
     {
-        return GetTextSizeExtended(text, fontFace, fontScale, thickness, 0, ref baseLine, lineAlignment);
+        return GetTextSizeExtended(
+            text,
+            fontFace,
+            fontScale,
+            thickness,
+            0,
+            ref baseLine,
+            lineAlignment
+        );
     }
 
     /// <summary>
@@ -115,8 +142,15 @@ public static partial class EmguCvExtensions
     /// <param name="baseLine">The baseline of the text.</param>
     /// <param name="lineAlignment">The alignment option for the text.</param>
     /// <returns>The size of the text.</returns>
-    public static Size GetTextSizeExtended(string text, FontFace fontFace, double fontScale, int thickness,
-        int lineGapOffset, ref int baseLine, PutTextLineAlignment lineAlignment = default)
+    public static Size GetTextSizeExtended(
+        string text,
+        FontFace fontFace,
+        double fontScale,
+        int thickness,
+        int lineGapOffset,
+        ref int baseLine,
+        PutTextLineAlignment lineAlignment = default
+    )
     {
         ArgumentNullException.ThrowIfNull(text);
         text = text.TrimEnd('\n', '\r', ' ');
@@ -130,9 +164,16 @@ public static partial class EmguCvExtensions
                 break;
             }
         }
-        var textSize = CvInvoke.GetTextSize(firstNonEmpty, fontFace, fontScale, thickness, ref baseLine);
+        var textSize = CvInvoke.GetTextSize(
+            firstNonEmpty,
+            fontFace,
+            fontScale,
+            thickness,
+            ref baseLine
+        );
 
-        if (lines.Length is 0 or 1) return textSize;
+        if (lines.Length is 0 or 1)
+            return textSize;
 
         var lineGap = textSize.Height / 3 + lineGapOffset;
         var width = 0;
@@ -142,12 +183,18 @@ public static partial class EmguCvExtensions
         {
             lines[i] = PutTextLineAlignmentTrim(lines[i], lineAlignment);
 
-            if (string.IsNullOrWhiteSpace(lines[i])) continue;
+            if (string.IsNullOrWhiteSpace(lines[i]))
+                continue;
             var baseLineRef = 0;
-            var lineSize = CvInvoke.GetTextSize(lines[i], fontFace, fontScale, thickness, ref baseLineRef);
+            var lineSize = CvInvoke.GetTextSize(
+                lines[i],
+                fontFace,
+                fontScale,
+                thickness,
+                ref baseLineRef
+            );
             width = Math.Max(width, lineSize.Width);
         }
-
 
         return new Size(width, height);
     }
@@ -161,7 +208,9 @@ public static partial class EmguCvExtensions
     /// <returns></returns>
     public static Mat InitMat(Size size, int channels = 1, DepthType depthType = DepthType.Cv8U)
     {
-        return size.Width <= 0 || size.Height <= 0 ? new Mat() : Mat.Zeros(size.Height, size.Width, depthType, channels);
+        return size.Width <= 0 || size.Height <= 0
+            ? new Mat()
+            : Mat.Zeros(size.Height, size.Width, depthType, channels);
     }
 
     /// <summary>
@@ -173,10 +222,16 @@ public static partial class EmguCvExtensions
     /// <param name="depthType">The depth type of the Mat.</param>
     /// <param name="mask">An optional mask to apply when setting the color.</param>
     /// <returns>The initialized Mat.</returns>
-    public static Mat InitMat(Size size, MCvScalar color, int channels = 1, DepthType depthType = DepthType.Cv8U,
-        IInputArray? mask = null)
+    public static Mat InitMat(
+        Size size,
+        MCvScalar color,
+        int channels = 1,
+        DepthType depthType = DepthType.Cv8U,
+        IInputArray? mask = null
+    )
     {
-        if (size.Width <= 0 || size.Height <= 0) return new Mat();
+        if (size.Width <= 0 || size.Height <= 0)
+            return new Mat();
         var mat = new Mat(size, depthType, channels);
         try
         {
@@ -199,7 +254,12 @@ public static partial class EmguCvExtensions
     /// <param name="channels">The number of channels for each Mat.</param>
     /// <param name="depthType">The depth type for each Mat.</param>
     /// <returns>An array of initialized Mats.</returns>
-    public static Mat[] InitMats(int count, Size size, int channels = 1, DepthType depthType = DepthType.Cv8U)
+    public static Mat[] InitMats(
+        int count,
+        Size size,
+        int channels = 1,
+        DepthType depthType = DepthType.Cv8U
+    )
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         var mats = new Mat[count];
@@ -258,11 +318,134 @@ public static partial class EmguCvExtensions
     /// <param name="iterations"></param>
     /// <param name="elementShape"></param>
     /// <returns></returns>
-    public static Mat CreateDynamicKernel(ref int iterations, MorphShapes elementShape = MorphShapes.Ellipse)
+    public static Mat CreateDynamicKernel(
+        ref int iterations,
+        MorphShapes elementShape = MorphShapes.Ellipse
+    )
     {
         var size = Math.Max(iterations, 1) * 2 + 1;
         iterations = 1;
         return CvInvoke.GetStructuringElement(elementShape, new Size(size, size), AnchorCenter);
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Writes an integer to the buffer using the invariant culture, without allocating an intermediate string.
+    /// </summary>
+    private static void WriteInvariant(ref BufferWriterSlim<char> buffer, int value)
+    {
+        // An int needs at most 11 chars ("-2147483648")
+        var span = buffer.GetSpan(11);
+        value.TryFormat(span, out var written, default, CultureInfo.InvariantCulture);
+        buffer.Advance(written);
+    }
+
+    #region Scan helpers
+
+    /// <summary>
+    /// Maps a raw pixel value to the grey value used by the scan methods, as a struct so the call is inlined.
+    /// </summary>
+    private interface IGreyMapper
+    {
+        byte Map(byte value);
+    }
+
+    private readonly struct ThresholdGreyMapper(byte thresholdGrey, bool useThreshold) : IGreyMapper
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public byte Map(byte value) =>
+            useThreshold ? (value <= thresholdGrey ? byte.MinValue : byte.MaxValue) : value;
+    }
+
+    private readonly struct FuncGreyMapper(Func<byte, byte> greyFunc) : IGreyMapper
+    {
+        public byte Map(byte value) => greyFunc(value);
+    }
+
+    /// <summary>
+    /// Scans vertical lines walking the matrix row by row, which is cache friendly, keeping the open run of every column.
+    /// The result is ordered by column and then by row, exactly as a column by column scan would return.
+    /// </summary>
+    private static GreyLine[] ScanLinesVertically<TMapper>(Mat src, TMapper mapper, Point offset)
+        where TMapper : struct, IGreyMapper
+    {
+        var width = src.Width;
+        var height = src.Height;
+
+        var runGrey = new byte[width];
+        var runStart = new int[width];
+        using var closed = new BufferWriterSlim<GreyLine>(stackalloc GreyLine[128]);
+
+        for (var y = 0; y < height; y++)
+        {
+            var row = src.GetReadOnlyRowSpan<byte>(y);
+            for (var x = 0; x < width; x++)
+            {
+                var grey = mapper.Map(row[x]);
+                var current = runGrey[x];
+                if (grey == current)
+                    continue;
+
+                if (current != 0)
+                {
+                    closed.Add(
+                        new GreyLine
+                        {
+                            StartX = x + offset.X,
+                            StartY = runStart[x] + offset.Y,
+                            EndX = x + offset.X,
+                            EndY = y - 1 + offset.Y,
+                            Grey = current,
+                        }
+                    );
+                }
+
+                runGrey[x] = grey;
+                runStart[x] = y;
+            }
+        }
+
+        // Close the runs that reach the bottom edge
+        for (var x = 0; x < width; x++)
+        {
+            if (runGrey[x] == 0)
+                continue;
+            closed.Add(
+                new GreyLine
+                {
+                    StartX = x + offset.X,
+                    StartY = runStart[x] + offset.Y,
+                    EndX = x + offset.X,
+                    EndY = height - 1 + offset.Y,
+                    Grey = runGrey[x],
+                }
+            );
+        }
+
+        // Runs were closed in row order, reorder them by column (stable counting sort, so rows stay ordered inside a column)
+        var lines = closed.WrittenSpan;
+        if (lines.IsEmpty)
+            return [];
+
+        var columnStart = new int[width + 1];
+        foreach (ref readonly var line in lines)
+        {
+            columnStart[line.StartX - offset.X + 1]++;
+        }
+
+        for (var x = 0; x < width; x++)
+        {
+            columnStart[x + 1] += columnStart[x];
+        }
+
+        var result = new GreyLine[lines.Length];
+        foreach (ref readonly var line in lines)
+        {
+            result[columnStart[line.StartX - offset.X]++] = line;
+        }
+
+        return result;
     }
 
     #endregion

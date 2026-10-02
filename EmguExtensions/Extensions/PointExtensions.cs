@@ -44,6 +44,19 @@ public static class PointExtensions
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
+    /// <summary>
+    /// Calculates the Euclidean distance between two points.
+    /// </summary>
+    /// <param name="start"></param>
+    /// <param name="end"></param>
+    /// <returns></returns>
+    public static double FindLength(PointF start, PointF end)
+    {
+        var dx = (double)end.X - start.X;
+        var dy = (double)end.Y - start.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
     extension(Point point)
     {
         /// <summary>

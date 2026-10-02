@@ -22,11 +22,11 @@
 *   SOFTWARE.
 */
 
-using Emgu.CV;
-using Emgu.CV.CvEnum;
 using System.Drawing;
 using System.IO.Compression;
 using System.IO.Hashing;
+using Emgu.CV;
+using Emgu.CV.CvEnum;
 
 namespace EmguExtensions;
 
@@ -34,6 +34,11 @@ namespace EmguExtensions;
 /// Represents a compressed <see cref="Mat"/> that can be compressed and decompressed using multiple <see cref="MatCompressor"/>s.<br/>
 /// This allows to have a high count of <see cref="CMat"/>s in memory without using too much memory.
 /// </summary>
+/// <remarks>
+/// All members are thread-safe. State is guarded by a reader/writer lock: every public property read takes the read lock,
+/// every mutation takes the write lock, and members that read several values at once (ratios, equality, <see cref="ToString"/>, ...)
+/// work on a single consistent snapshot.
+/// </remarks>
 public class CMat : IEquatable<CMat>
 {
     #region Members
@@ -41,6 +46,41 @@ public class CMat : IEquatable<CMat>
     private readonly ReaderWriterLockSlim _rwLock = new();
     private ulong? _hash;
     private byte[] _compressedBytes = [];
+    private bool _isInitialized;
+    private bool _isCompressed;
+    private int _thresholdToCompress = 512;
+    private int _width;
+    private int _height;
+    private DepthType _depth = DepthType.Cv8U;
+    private int _channels = 1;
+    private Rectangle _roi;
+    private CompressionLevel _compressionLevel = MatCompressor.DefaultCompressionLevel;
+    private MatCompressor _compressor = MatCompressor.DefaultCompressor;
+    private MatCompressor _decompressor = MatCompressor.DefaultCompressor;
+
+    /// <summary>
+    /// A consistent, immutable view of the state, captured under a single read lock.
+    /// </summary>
+    private readonly record struct State(
+        byte[] Bytes,
+        ulong? Hash,
+        bool IsInitialized,
+        bool IsCompressed,
+        int Width,
+        int Height,
+        DepthType Depth,
+        int Channels,
+        Rectangle Roi,
+        MatCompressor Decompressor,
+        CompressionLevel CompressionLevel
+    )
+    {
+        public int ElementSize => Depth.ByteCount * Channels;
+
+        public int UncompressedLength =>
+            (Roi.Width <= 0 || Roi.Height <= 0 ? Width * Height : Roi.Width * Roi.Height)
+            * ElementSize;
+    }
 
     #endregion
 
@@ -49,133 +89,105 @@ public class CMat : IEquatable<CMat>
     /// <summary>
     /// Gets the compressed bytes that have been compressed with <see cref="Decompressor"/>.
     /// </summary>
-    public byte[] CompressedBytes
-    {
-        get => _compressedBytes;
-        private set
-        {
-            _compressedBytes = value;
-            _hash = null;
-            IsInitialized = true;
-            IsCompressed = value.Length != 0;
-        }
-    }
+    /// <remarks>
+    /// The returned array is the internal buffer, not a copy. Treat it as read-only: mutating it breaks the cached <see cref="Hash"/>
+    /// and the thread-safety guarantees of this class.
+    /// </remarks>
+    public byte[] CompressedBytes => Read(ref _compressedBytes);
 
     /// <summary>
     /// Gets the XxHash3 hash of the <see cref="CompressedBytes"/>.
     /// </summary>
-    public ulong Hash
-    {
-        get
-        {
-            _rwLock.EnterReadLock();
-            try
-            {
-                if (_hash.HasValue) return _hash.Value;
-            }
-            finally
-            {
-                _rwLock.ExitReadLock();
-            }
-
-            _rwLock.EnterUpgradeableReadLock();
-            try
-            {
-                if (_hash.HasValue) return _hash.Value;
-
-                var hash = XxHash3.HashToUInt64(_compressedBytes);
-                _rwLock.EnterWriteLock();
-                try
-                {
-                    _hash = hash;
-                }
-                finally
-                {
-                    _rwLock.ExitWriteLock();
-                }
-
-                return hash;
-            }
-            finally
-            {
-                _rwLock.ExitUpgradeableReadLock();
-            }
-        }
-    }
+    public ulong Hash => ResolveHash(GetState());
 
     /// <summary>
     /// Gets a value indicating whether the <see cref="CompressedBytes"/> have ever been set.
     /// </summary>
-    public bool IsInitialized { get; private set; }
+    public bool IsInitialized => Read(ref _isInitialized);
 
     /// <summary>
     /// Gets a value indicating whether the <see cref="CompressedBytes"/> are compressed or raw bytes.
     /// </summary>
-    public bool IsCompressed { get; private set; }
+    public bool IsCompressed => Read(ref _isCompressed);
 
     /// <summary>
     /// Gets or sets the threshold in bytes to compress the data. Mat's equal to or less than this size will not be compressed.
     /// </summary>
-    public int ThresholdToCompress { get; set; } = 512;
+    public int ThresholdToCompress
+    {
+        get => Read(ref _thresholdToCompress);
+        set => Write(ref _thresholdToCompress, value);
+    }
 
     /// <summary>
     /// Gets the cached width of the <see cref="Mat"/> that was compressed.
     /// </summary>
-    public int Width { get; private set; }
+    public int Width => Read(ref _width);
 
     /// <summary>
     /// Gets the cached height of the <see cref="Mat"/> that was compressed.
     /// </summary>
-    public int Height { get; private set; }
+    public int Height => Read(ref _height);
 
     /// <summary>
     /// Gets the cached size of the <see cref="Mat"/> that was compressed.
     /// </summary>
     public Size Size
     {
-        get => new(Width, Height);
-        private set
+        get
         {
-            Width = value.Width;
-            Height = value.Height;
+            var state = GetState();
+            return new Size(state.Width, state.Height);
         }
     }
 
     /// <summary>
     /// Gets the cached depth of the <see cref="Mat"/> that was compressed.
     /// </summary>
-    public DepthType Depth { get; private set; } = DepthType.Cv8U;
+    public DepthType Depth => Read(ref _depth);
 
     /// <summary>
     /// Gets the cached number of channels of the <see cref="Mat"/> that was compressed.
     /// </summary>
-    public int Channels { get; private set; } = 1;
+    public int Channels => Read(ref _channels);
 
     /// <summary>
     /// Gets the size, in bytes, of a single element in the data structure, calculated as the product of the depth's
     /// byte count and the number of channels.
     /// </summary>
-    public int ElementSize => Depth.ByteCount * Channels;
+    public int ElementSize => GetState().ElementSize;
 
     /// <summary>
     /// Gets the cached ROI of the <see cref="Mat"/> that was compressed.
     /// </summary>
-    public Rectangle Roi { get; private set; }
+    public Rectangle Roi => Read(ref _roi);
 
     /// <summary>
     /// Gets or sets the <see cref="CompressionLevel"/> that will be used to compress the <see cref="Mat"/> if the <see cref="Compressor"/> supports it. Default is <see cref="MatCompressor.DefaultCompressionLevel"/> contingencies.
     /// </summary>
-    public CompressionLevel CompressionLevel { get; set; } = MatCompressor.DefaultCompressionLevel;
+    public CompressionLevel CompressionLevel
+    {
+        get => Read(ref _compressionLevel);
+        set => Write(ref _compressionLevel, value);
+    }
 
     /// <summary>
     /// Gets or sets the <see cref="MatCompressor"/> that will be used to compress and decompress the <see cref="Mat"/> contingencies.
     /// </summary>
-    public MatCompressor Compressor { get; set; } = MatCompressor.DefaultCompressor;
+    public MatCompressor Compressor
+    {
+        get => Read(ref _compressor);
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            Write(ref _compressor, value);
+        }
+    }
 
     /// <summary>
     /// Gets the <see cref="MatCompressor"/> that will be used to decompress the <see cref="Mat"/>.
     /// </summary>
-    public MatCompressor Decompressor { get; private set; } = MatCompressor.DefaultCompressor;
+    public MatCompressor Decompressor => Read(ref _decompressor);
 
     /// <summary>
     /// Gets a value indicating whether the <see cref="CompressedBytes"/> are empty.
@@ -185,12 +197,12 @@ public class CMat : IEquatable<CMat>
     /// <summary>
     /// Gets the length of the <see cref="CompressedBytes"/>.
     /// </summary>
-    public int CompressedLength => CompressedBytes.Length;
+    public int CompressedLength => Read(ref _compressedBytes).Length;
 
     /// <summary>
     /// Gets the uncompressed length of the <see cref="Mat"/> in bytes, aka bitmap size.
     /// </summary>
-    public int UncompressedLength => (Roi.Width <= 0 || Roi.Height <= 0 ? Width * Height : Roi.Width * Roi.Height) * ElementSize;
+    public int UncompressedLength => GetState().UncompressedLength;
 
     /// <summary>
     /// Gets the compression ratio of the <see cref="CompressedBytes"/> to the <see cref="UncompressedLength"/>.
@@ -199,10 +211,8 @@ public class CMat : IEquatable<CMat>
     {
         get
         {
-            var uncompressedLength = UncompressedLength;
-            var compressedLength = CompressedLength;
-            if (uncompressedLength == 0 || compressedLength == 0 || compressedLength == uncompressedLength) return 0;
-            return MathF.Round((float)uncompressedLength / compressedLength, 2, MidpointRounding.AwayFromZero);
+            var state = GetState();
+            return ComputeCompressionRatio(state.UncompressedLength, state.Bytes.Length);
         }
     }
 
@@ -213,10 +223,8 @@ public class CMat : IEquatable<CMat>
     {
         get
         {
-            var uncompressedLength = UncompressedLength;
-            var compressedLength = CompressedLength;
-            if (compressedLength == 0 || uncompressedLength == 0 || compressedLength == uncompressedLength) return 0;
-            return MathF.Round(100 - (compressedLength * 100f / uncompressedLength), 2, MidpointRounding.AwayFromZero);
+            var state = GetState();
+            return ComputeCompressionPercentage(state.UncompressedLength, state.Bytes.Length);
         }
     }
 
@@ -227,17 +235,30 @@ public class CMat : IEquatable<CMat>
     {
         get
         {
-            var uncompressedLength = UncompressedLength;
-            var compressedLength = CompressedLength;
-            if (uncompressedLength == 0 || compressedLength == 0) return 0;
-            return MathF.Round(uncompressedLength * 100f / compressedLength, 2, MidpointRounding.AwayFromZero);
+            var state = GetState();
+            var uncompressedLength = state.UncompressedLength;
+            var compressedLength = state.Bytes.Length;
+            if (uncompressedLength == 0 || compressedLength == 0)
+                return 0;
+            return MathF.Round(
+                uncompressedLength * 100f / compressedLength,
+                2,
+                MidpointRounding.AwayFromZero
+            );
         }
     }
 
     /// <summary>
     /// Gets the number of bytes saved by compressing the <see cref="Mat"/>.
     /// </summary>
-    public int SavedBytes => UncompressedLength - CompressedLength;
+    public int SavedBytes
+    {
+        get
+        {
+            var state = GetState();
+            return state.UncompressedLength - state.Bytes.Length;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the <see cref="Mat"/> that will be compressed and decompressed.<br/>
@@ -266,12 +287,17 @@ public class CMat : IEquatable<CMat>
     /// <param name="height">The height of the Mat.</param>
     /// <param name="depth">The depth type of the Mat.</param>
     /// <param name="channels">The number of channels.</param>
-    public CMat(int width = 0, int height = 0, DepthType depth = DepthType.Cv8U, int channels = 1)
+    public CMat(
+        int width = 0,
+        int height = 0,
+        DepthType depth = DepthType.Cv8U,
+        int channels = 1
+    )
     {
-        Width = width;
-        Height = height;
-        Depth = depth;
-        Channels = channels;
+        _width = width;
+        _height = height;
+        _depth = depth;
+        _channels = channels;
     }
 
     /// <summary>
@@ -280,9 +306,8 @@ public class CMat : IEquatable<CMat>
     /// <param name="size">The size of the Mat.</param>
     /// <param name="depth">The depth type of the Mat.</param>
     /// <param name="channels">The number of channels.</param>
-    public CMat(Size size, DepthType depth = DepthType.Cv8U, int channels = 1) : this(size.Width, size.Height, depth, channels)
-    {
-    }
+    public CMat(Size size, DepthType depth = DepthType.Cv8U, int channels = 1)
+        : this(size.Width, size.Height, depth, channels) { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CMat"/> class with the specified compressor, dimensions, depth, and channel count.
@@ -292,10 +317,18 @@ public class CMat : IEquatable<CMat>
     /// <param name="height">The height of the Mat.</param>
     /// <param name="depth">The depth type of the Mat.</param>
     /// <param name="channels">The number of channels.</param>
-    public CMat(MatCompressor compressor, int width = 0, int height = 0, DepthType depth = DepthType.Cv8U, int channels = 1) : this(width, height, depth, channels)
+    public CMat(
+        MatCompressor compressor,
+        int width = 0,
+        int height = 0,
+        DepthType depth = DepthType.Cv8U,
+        int channels = 1
+    )
+        : this(width, height, depth, channels)
     {
-        Compressor = compressor;
-        Decompressor = compressor;
+        ArgumentNullException.ThrowIfNull(compressor);
+        _compressor = compressor;
+        _decompressor = compressor;
     }
 
     /// <summary>
@@ -305,27 +338,35 @@ public class CMat : IEquatable<CMat>
     /// <param name="size">The size of the Mat.</param>
     /// <param name="depth">The depth type of the Mat.</param>
     /// <param name="channels">The number of channels.</param>
-    public CMat(MatCompressor compressor, Size size, DepthType depth = DepthType.Cv8U, int channels = 1) : this(compressor, size.Width, size.Height, depth, channels)
-    {
-    }
+    public CMat(
+        MatCompressor compressor,
+        Size size,
+        DepthType depth = DepthType.Cv8U,
+        int channels = 1
+    )
+        : this(compressor, size.Width, size.Height, depth, channels) { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CMat"/> class by compressing the specified <see cref="Mat"/>.
     /// </summary>
     /// <param name="mat">The Mat to compress.</param>
-    /// <param name="compressor">The compressor to use, or <see langword="null"/> to use the default (Brotli).</param>
-    /// <param name="compressionLevel">The compression level to use.</param>
+    /// <param name="compressor">The compressor to use, or <see langword="null"/> to use <see cref="MatCompressor.DefaultCompressor"/>.</param>
+    /// <param name="compressionLevel">The compression level to use, or <see langword="null"/> to use <see cref="MatCompressor.DefaultCompressionLevel"/>.</param>
     /// <remarks>To create an async CMat, prefer empty constructor and use CompressAsync method.</remarks>
-    public CMat(Mat mat, MatCompressor? compressor = null, CompressionLevel compressionLevel = CompressionLevel.Optimal)
+    public CMat(
+        Mat mat,
+        MatCompressor? compressor = null,
+        CompressionLevel? compressionLevel = null
+    )
     {
         ArgumentNullException.ThrowIfNull(mat);
         if (compressor is not null)
         {
-            Compressor = compressor;
-            Decompressor = compressor;
+            _compressor = compressor;
+            _decompressor = compressor;
         }
 
-        CompressionLevel = compressionLevel;
+        _compressionLevel = compressionLevel ?? MatCompressor.DefaultCompressionLevel;
 
         Compress(mat);
     }
@@ -334,21 +375,167 @@ public class CMat : IEquatable<CMat>
     /// Initializes a new instance of the <see cref="CMat"/> class by compressing the specified <see cref="MatRoi"/>.
     /// </summary>
     /// <param name="matRoi">The MatRoi to compress.</param>
-    /// <param name="compressor">The compressor to use, or <see langword="null"/> to use the default (Brotli).</param>
-    /// <param name="compressionLevel">The compression level to use.</param>
+    /// <param name="compressor">The compressor to use, or <see langword="null"/> to use <see cref="MatCompressor.DefaultCompressor"/>.</param>
+    /// <param name="compressionLevel">The compression level to use, or <see langword="null"/> to use <see cref="MatCompressor.DefaultCompressionLevel"/>.</param>
     /// <remarks>To create an async CMat, prefer empty constructor and use CompressAsync method.</remarks>
-    public CMat(MatRoi matRoi, MatCompressor? compressor = null, CompressionLevel compressionLevel = CompressionLevel.Optimal)
+    public CMat(
+        MatRoi matRoi,
+        MatCompressor? compressor = null,
+        CompressionLevel? compressionLevel = null
+    )
     {
         ArgumentNullException.ThrowIfNull(matRoi);
         if (compressor is not null)
         {
-            Compressor = compressor;
-            Decompressor = compressor;
+            _compressor = compressor;
+            _decompressor = compressor;
         }
 
-        CompressionLevel = compressionLevel;
+        _compressionLevel = compressionLevel ?? MatCompressor.DefaultCompressionLevel;
 
         Compress(matRoi);
+    }
+
+    #endregion
+
+    #region Locking helpers
+
+    private static float ComputeCompressionRatio(int uncompressedLength, int compressedLength)
+    {
+        if (
+            uncompressedLength == 0
+            || compressedLength == 0
+            || compressedLength == uncompressedLength
+        )
+            return 0;
+        return MathF.Round(
+            (float)uncompressedLength / compressedLength,
+            2,
+            MidpointRounding.AwayFromZero
+        );
+    }
+
+    private static float ComputeCompressionPercentage(int uncompressedLength, int compressedLength)
+    {
+        if (
+            compressedLength == 0
+            || uncompressedLength == 0
+            || compressedLength == uncompressedLength
+        )
+            return 0;
+        return MathF.Round(
+            100 - (compressedLength * 100f / uncompressedLength),
+            2,
+            MidpointRounding.AwayFromZero
+        );
+    }
+
+    /// <summary>
+    /// Reads a field under the read lock. Must not be called while the current thread already holds a lock.
+    /// </summary>
+    private T Read<T>(ref T field)
+    {
+        _rwLock.EnterReadLock();
+        try
+        {
+            return field;
+        }
+        finally
+        {
+            _rwLock.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Writes a field under the write lock. Must not be called while the current thread already holds a lock.
+    /// </summary>
+    private void Write<T>(ref T field, T value)
+    {
+        _rwLock.EnterWriteLock();
+        try
+        {
+            field = value;
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Captures a consistent snapshot of the state under a single read lock.
+    /// </summary>
+    private State GetState()
+    {
+        _rwLock.EnterReadLock();
+        try
+        {
+            return new State(
+                _compressedBytes,
+                _hash,
+                _isInitialized,
+                _isCompressed,
+                _width,
+                _height,
+                _depth,
+                _channels,
+                _roi,
+                _decompressor,
+                _compressionLevel
+            );
+        }
+        finally
+        {
+            _rwLock.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Gets the hash of a snapshot, computing it outside of any lock when it is not cached yet, and caches it
+    /// when the bytes have not been replaced in the meantime.
+    /// </summary>
+    private ulong ResolveHash(in State state)
+    {
+        if (state.Hash.HasValue)
+            return state.Hash.Value;
+
+        // The compressed array is never mutated in place, only replaced, so it is safe to hash without holding a lock
+        var hash = XxHash3.HashToUInt64(state.Bytes);
+
+        _rwLock.EnterWriteLock();
+        try
+        {
+            if (ReferenceEquals(_compressedBytes, state.Bytes))
+                _hash = hash;
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
+
+        return hash;
+    }
+
+    /// <summary>
+    /// Sets the compressed bytes and the state derived from them. Caller must hold the write lock.
+    /// </summary>
+    private void SetBytesInternal(byte[] value)
+    {
+        _compressedBytes = value;
+        _hash = null;
+        _isInitialized = true;
+        _isCompressed = value.Length != 0;
+    }
+
+    /// <summary>
+    /// Clears the compressed bytes and the ROI when not empty. Caller must hold the write lock.
+    /// </summary>
+    private void ClearBytesInternal()
+    {
+        if (_compressedBytes.Length == 0)
+            return;
+        SetBytesInternal([]);
+        _roi = Rectangle.Empty;
     }
 
     #endregion
@@ -362,27 +549,35 @@ public class CMat : IEquatable<CMat>
     /// <param name="compressionLevel">The compression level to use.</param>
     /// <param name="reEncodeWithNewCompressor">True to re-encodes the <see cref="Mat"/> with the new <see cref="Compressor"/>, otherwise false.</param>
     /// <returns>True if compressor has been changed, otherwise false.</returns>
-    public bool ChangeCompressor(MatCompressor compressor, CompressionLevel compressionLevel, bool reEncodeWithNewCompressor = false)
+    public bool ChangeCompressor(
+        MatCompressor compressor,
+        CompressionLevel compressionLevel,
+        bool reEncodeWithNewCompressor = false
+    )
     {
         ArgumentNullException.ThrowIfNull(compressor);
         _rwLock.EnterWriteLock();
         try
         {
-            bool willReEncode = reEncodeWithNewCompressor
-                                && !IsEmpty
-                                && (!ReferenceEquals(Decompressor, compressor)
-                                    || CompressionLevel != compressionLevel);
-            if (ReferenceEquals(Compressor, compressor)
-                && CompressionLevel == compressionLevel
-                && !willReEncode) return false; // Nothing to change
-            Compressor = compressor;
-            CompressionLevel = compressionLevel;
+            var willReEncode =
+                reEncodeWithNewCompressor
+                && _compressedBytes.Length != 0
+                && (!_decompressor.Equals(compressor) || _compressionLevel != compressionLevel);
+            if (
+                _compressor.Equals(compressor)
+                && _compressionLevel == compressionLevel
+                && !willReEncode
+            )
+                return false; // Nothing to change
+
+            _compressor = compressor;
+            _compressionLevel = compressionLevel;
 
             if (willReEncode)
             {
-                var lastWidth = Width;
-                var lastHeight = Height;
-                var lastRoi = Roi;
+                var lastWidth = _width;
+                var lastHeight = _height;
+                var lastRoi = _roi;
                 using var mat = RawDecompressInternal();
                 try
                 {
@@ -390,9 +585,9 @@ public class CMat : IEquatable<CMat>
                 }
                 finally
                 {
-                    Width = lastWidth;
-                    Height = lastHeight;
-                    Roi = lastRoi;
+                    _width = lastWidth;
+                    _height = lastHeight;
+                    _roi = lastRoi;
                 }
             }
 
@@ -423,9 +618,17 @@ public class CMat : IEquatable<CMat>
     /// <param name="reEncodeWithNewCompressor">True to re-encodes the <see cref="Mat"/> with the new <see cref="Compressor"/>, otherwise false.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>True if compressor has been changed, otherwise false.</returns>
-    public Task<bool> ChangeCompressorAsync(MatCompressor compressor, CompressionLevel compressionLevel, bool reEncodeWithNewCompressor = false, CancellationToken cancellationToken = default)
+    public Task<bool> ChangeCompressorAsync(
+        MatCompressor compressor,
+        CompressionLevel compressionLevel,
+        bool reEncodeWithNewCompressor = false,
+        CancellationToken cancellationToken = default
+    )
     {
-        return Task.Run(() => ChangeCompressor(compressor, compressionLevel, reEncodeWithNewCompressor), cancellationToken);
+        return Task.Run(
+            () => ChangeCompressor(compressor, compressionLevel, reEncodeWithNewCompressor),
+            cancellationToken
+        );
     }
 
     /// <summary>
@@ -435,22 +638,33 @@ public class CMat : IEquatable<CMat>
     /// <param name="reEncodeWithNewCompressor">True to re-encodes the <see cref="Mat"/> with the new <see cref="Compressor"/>, otherwise false.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>True if compressor has been changed, otherwise false.</returns>
-    public Task<bool> ChangeCompressorAsync(MatCompressor compressor, bool reEncodeWithNewCompressor = false, CancellationToken cancellationToken = default)
+    public Task<bool> ChangeCompressorAsync(
+        MatCompressor compressor,
+        bool reEncodeWithNewCompressor = false,
+        CancellationToken cancellationToken = default
+    )
     {
-        return ChangeCompressorAsync(compressor, CompressionLevel, reEncodeWithNewCompressor, cancellationToken);
+        return ChangeCompressorAsync(
+            compressor,
+            CompressionLevel,
+            reEncodeWithNewCompressor,
+            cancellationToken
+        );
     }
 
     /// <summary>
     /// Sets the <see cref="CompressedBytes"/> to an empty byte array and sets <see cref="IsCompressed"/> to false.
     /// </summary>
+    /// <remarks>
+    /// This is a no-op when the <see cref="CompressedBytes"/> are already empty, in which case <see cref="IsInitialized"/> is left untouched.
+    /// Use <see cref="SetEmptyCompressedBytes(bool)"/> to set <see cref="IsInitialized"/> explicitly.
+    /// </remarks>
     public void SetEmptyCompressedBytes()
     {
         _rwLock.EnterWriteLock();
         try
         {
-            if (IsEmpty) return; // Already empty
-            CompressedBytes = [];
-            Roi = Rectangle.Empty;
+            ClearBytesInternal();
         }
         finally
         {
@@ -467,12 +681,8 @@ public class CMat : IEquatable<CMat>
         _rwLock.EnterWriteLock();
         try
         {
-            if (!IsEmpty)
-            {
-                CompressedBytes = [];
-                Roi = Rectangle.Empty;
-            }
-            IsInitialized = isInitialized;
+            ClearBytesInternal();
+            _isInitialized = isInitialized;
         }
         finally
         {
@@ -490,15 +700,11 @@ public class CMat : IEquatable<CMat>
         _rwLock.EnterWriteLock();
         try
         {
-            if (!IsEmpty)
-            {
-                CompressedBytes = [];
-                Roi = Rectangle.Empty;
-            }
-            Width = src.Width;
-            Height = src.Height;
-            Depth = src.Depth;
-            Channels = src.NumberOfChannels;
+            ClearBytesInternal();
+            _width = src.Width;
+            _height = src.Height;
+            _depth = src.Depth;
+            _channels = src.NumberOfChannels;
         }
         finally
         {
@@ -517,16 +723,12 @@ public class CMat : IEquatable<CMat>
         _rwLock.EnterWriteLock();
         try
         {
-            if (!IsEmpty)
-            {
-                CompressedBytes = [];
-                Roi = Rectangle.Empty;
-            }
-            Width = src.Width;
-            Height = src.Height;
-            Depth = src.Depth;
-            Channels = src.NumberOfChannels;
-            IsInitialized = isInitialized;
+            ClearBytesInternal();
+            _width = src.Width;
+            _height = src.Height;
+            _depth = src.Depth;
+            _channels = src.NumberOfChannels;
+            _isInitialized = isInitialized;
         }
         finally
         {
@@ -537,20 +739,30 @@ public class CMat : IEquatable<CMat>
     /// <summary>
     /// Sets the <see cref="CompressedBytes"/> and <see cref="Compressor"/> and <see cref="Decompressor"/>.
     /// </summary>
-    /// <param name="compressedBytes">The compressed byte array to set.</param>
+    /// <param name="compressedBytes">The compressed byte array to set. The <see cref="CMat"/> takes ownership of the array (it is not copied): do not modify it afterwards.</param>
     /// <param name="decompressor">The decompressor that matches the compressed data.</param>
     /// <param name="setCompressor">If <see langword="true"/>, also sets the <see cref="Compressor"/> to the specified decompressor.</param>
-    public void SetCompressedBytes(byte[] compressedBytes, MatCompressor decompressor, bool setCompressor = true)
+    /// <remarks>
+    /// The <see cref="Roi"/> is cleared, the bytes are expected to describe the full <see cref="Width"/> x <see cref="Height"/> area.
+    /// </remarks>
+    public void SetCompressedBytes(
+        byte[] compressedBytes,
+        MatCompressor decompressor,
+        bool setCompressor = true
+    )
     {
         ArgumentNullException.ThrowIfNull(compressedBytes);
         ArgumentNullException.ThrowIfNull(decompressor);
         _rwLock.EnterWriteLock();
         try
         {
-            CompressedBytes = compressedBytes;
-            if (setCompressor) Compressor = decompressor;
-            Decompressor = decompressor;
-            if (ReferenceEquals(decompressor, MatCompressorNone.Instance)) IsCompressed = false;
+            SetBytesInternal(compressedBytes);
+            _roi = Rectangle.Empty;
+            if (setCompressor)
+                _compressor = decompressor;
+            _decompressor = decompressor;
+            if (ReferenceEquals(decompressor, MatCompressorNone.Instance))
+                _isCompressed = false;
         }
         finally
         {
@@ -559,14 +771,14 @@ public class CMat : IEquatable<CMat>
     }
 
     /// <summary>
-    /// Sets the <see cref="CompressedBytes"/> to uncompressed bitmap data.
+    /// Sets the <see cref="CompressedBytes"/> to uncompressed bitmap data. Caller must hold the write lock.
     /// </summary>
     /// <param name="src">The source Mat whose raw data will be stored uncompressed.</param>
     private void SetUncompressed(Mat src)
     {
-        CompressedBytes = src.ToArray();
-        IsCompressed = false;
-        Decompressor = MatCompressorNone.Instance;
+        SetBytesInternal(src.ToArray());
+        _isCompressed = false;
+        _decompressor = MatCompressorNone.Instance;
     }
 
     /// <summary>
@@ -592,20 +804,25 @@ public class CMat : IEquatable<CMat>
     /// </summary>
     private void CompressInternal(Mat src)
     {
-        Width = src.Width;
-        Height = src.Height;
-        Depth = src.Depth;
-        Channels = src.NumberOfChannels;
-        Roi = Rectangle.Empty;
+        _width = src.Width;
+        _height = src.Height;
+        _depth = src.Depth;
+        _channels = src.NumberOfChannels;
+        _roi = Rectangle.Empty;
 
         if (src.IsEmpty)
         {
-            CompressedBytes = [];
+            SetBytesInternal([]);
             return;
         }
 
         var srcLength = src.ByteCountInt32;
-        if (srcLength <= ThresholdToCompress) // Do not compress if the size is smaller or equal to the threshold
+
+        // Do not compress if the size is smaller or equal to the threshold, or if there is nothing to compress with
+        if (
+            srcLength <= _thresholdToCompress
+            || ReferenceEquals(_compressor, MatCompressorNone.Instance)
+        )
         {
             SetUncompressed(src);
             return;
@@ -613,18 +830,28 @@ public class CMat : IEquatable<CMat>
 
         try
         {
-            var compressed = Compressor.Compress(src, CompressionLevel);
-            if (compressed.Length < srcLength) // Compressed ok
+            var compressed = _compressor.Compress(src, _compressionLevel);
+            if (compressed.Length > 0 && compressed.Length < srcLength) // Compressed ok
             {
-                CompressedBytes = compressed;
-                Decompressor = Compressor;
+                SetBytesInternal(compressed);
+                _decompressor = _compressor;
             }
-            else // Compressed size is larger or equal to uncompressed size, store raw
+            else // Empty result, or compressed size is larger or equal to uncompressed size, store raw
             {
                 SetUncompressed(src);
             }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) // Cannot compress due some error
+        // Cannot compress due some codec error (e.g. unsupported type), store raw instead.
+        // Argument errors (e.g. invalid level) are programming errors and must surface.
+        catch (Exception ex)
+            when (ex
+                    is not (
+                        OutOfMemoryException
+                        or AccessViolationException
+                        or OperationCanceledException
+                        or ArgumentException
+                    )
+            )
         {
             SetUncompressed(src);
         }
@@ -642,12 +869,12 @@ public class CMat : IEquatable<CMat>
         {
             if (src.Roi.Width <= 0 || src.Roi.Height <= 0)
             {
-                Width = src.SourceMat.Width;
-                Height = src.SourceMat.Height;
-                Depth = src.SourceMat.Depth;
-                Channels = src.SourceMat.NumberOfChannels;
-                Roi = Rectangle.Empty;
-                CompressedBytes = [];
+                _width = src.SourceMat.Width;
+                _height = src.SourceMat.Height;
+                _depth = src.SourceMat.Depth;
+                _channels = src.SourceMat.NumberOfChannels;
+                _roi = Rectangle.Empty;
+                SetBytesInternal([]);
                 return;
             }
 
@@ -658,9 +885,9 @@ public class CMat : IEquatable<CMat>
             else
             {
                 CompressInternal(src.RoiMat);
-                Width = src.SourceMat.Width;
-                Height = src.SourceMat.Height;
-                Roi = src.Roi;
+                _width = src.SourceMat.Width;
+                _height = src.SourceMat.Height;
+                _roi = src.Roi;
             }
         }
         finally
@@ -713,27 +940,52 @@ public class CMat : IEquatable<CMat>
     /// </summary>
     private Mat RawDecompressInternal()
     {
-        if (IsEmpty)
-            return Roi.Width <= 0 || Roi.Height <= 0 ? CreateMatZeros() : EmguCvExtensions.InitMat(Roi.Size, Channels, Depth);
+        var hasRoi = _roi.Width > 0 && _roi.Height > 0;
 
-        var mat = Roi.Width <= 0 || Roi.Height <= 0 ? CreateMat() : new Mat(Roi.Size, Depth, Channels);
+        if (_compressedBytes.Length == 0)
+            return hasRoi
+                ? EmguCvExtensions.InitMat(_roi.Size, _channels, _depth)
+                : CreateMatZerosInternal();
+
+        var mat = hasRoi ? new Mat(_roi.Size, _depth, _channels) : CreateMatInternal();
         try
         {
-            if (IsCompressed)
+            if (_isCompressed)
             {
-                Decompressor.Decompress(CompressedBytes, mat);
+                _decompressor.Decompress(_compressedBytes, mat);
             }
             else
             {
-                mat.SetTo(CompressedBytes);
+                MatCompressorNone.Instance.Decompress(_compressedBytes, mat);
             }
 
+            ValidateDecompressed(mat, hasRoi ? _roi.Size : new Size(_width, _height));
             return mat;
         }
         catch
         {
             mat.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Validates that the decompressed <paramref name="mat"/> matches the cached description, when there is one.
+    /// </summary>
+    private void ValidateDecompressed(Mat mat, Size expectedSize)
+    {
+        if (expectedSize.Width <= 0 || expectedSize.Height <= 0)
+            return; // The size is unknown (e.g. self-describing data set without a size)
+
+        if (
+            mat.Size != expectedSize
+            || mat.Depth != _depth
+            || mat.NumberOfChannels != _channels
+        )
+        {
+            throw new InvalidDataException(
+                $"The decompressed data ({mat.Width}x{mat.Height}, {mat.Depth}, {mat.NumberOfChannels} channel(s)) does not match the expected description ({expectedSize.Width}x{expectedSize.Height}, {_depth}, {_channels} channel(s))."
+            );
         }
     }
 
@@ -756,15 +1008,17 @@ public class CMat : IEquatable<CMat>
         _rwLock.EnterReadLock();
         try
         {
-            if (IsEmpty) return CreateMatZeros();
+            if (_compressedBytes.Length == 0)
+                return CreateMatZerosInternal();
 
             var mat = RawDecompressInternal();
-            if (Roi.Width <= 0 || Roi.Height <= 0) return mat;
+            if (_roi.Width <= 0 || _roi.Height <= 0)
+                return mat;
 
-            var fullMat = CreateMatZeros();
+            var fullMat = CreateMatZerosInternal();
             try
             {
-                using var roi = new Mat(fullMat, Roi);
+                using var roi = new Mat(fullMat, _roi);
                 mat.CopyTo(roi);
                 return fullMat;
             }
@@ -804,8 +1058,22 @@ public class CMat : IEquatable<CMat>
     /// <returns></returns>
     public Mat CreateMat()
     {
-        if (Width <= 0 || Height <= 0) return new Mat();
-        return new Mat(Size, Depth, Channels);
+        _rwLock.EnterReadLock();
+        try
+        {
+            return CreateMatInternal();
+        }
+        finally
+        {
+            _rwLock.ExitReadLock();
+        }
+    }
+
+    private Mat CreateMatInternal()
+    {
+        if (_width <= 0 || _height <= 0)
+            return new Mat();
+        return new Mat(new Size(_width, _height), _depth, _channels);
     }
 
     /// <summary>
@@ -814,7 +1082,20 @@ public class CMat : IEquatable<CMat>
     /// <returns></returns>
     public Mat CreateMatZeros()
     {
-        return EmguCvExtensions.InitMat(Size, Channels, Depth);
+        _rwLock.EnterReadLock();
+        try
+        {
+            return CreateMatZerosInternal();
+        }
+        finally
+        {
+            _rwLock.ExitReadLock();
+        }
+    }
+
+    private Mat CreateMatZerosInternal()
+    {
+        return EmguCvExtensions.InitMat(new Size(_width, _height), _channels, _depth);
     }
 
     #endregion
@@ -827,38 +1108,33 @@ public class CMat : IEquatable<CMat>
     public void CopyTo(CMat dst)
     {
         ArgumentNullException.ThrowIfNull(dst);
-        if (ReferenceEquals(this, dst)) return;
+        if (ReferenceEquals(this, dst))
+            return;
 
         byte[] compressedBytes;
-        ulong? hash;
-        bool isInitialized;
-        bool isCompressed;
+        State state;
         int thresholdToCompress;
-        CompressionLevel compressionLevel;
         MatCompressor compressor;
-        MatCompressor decompressor;
-        int width;
-        int height;
-        DepthType depth;
-        int channels;
-        Rectangle roi;
 
         _rwLock.EnterReadLock();
         try
         {
-            compressedBytes = _compressedBytes.ToArrayPerf();
-            hash = _hash;
-            isInitialized = IsInitialized;
-            isCompressed = IsCompressed;
-            thresholdToCompress = ThresholdToCompress;
-            compressionLevel = CompressionLevel;
-            compressor = Compressor;
-            decompressor = Decompressor;
-            width = Width;
-            height = Height;
-            depth = Depth;
-            channels = Channels;
-            roi = Roi;
+            state = new State(
+                _compressedBytes,
+                _hash,
+                _isInitialized,
+                _isCompressed,
+                _width,
+                _height,
+                _depth,
+                _channels,
+                _roi,
+                _decompressor,
+                _compressionLevel
+            );
+            compressedBytes = _compressedBytes.ToArrayPerf(); // Deep copy, the clone must not share the buffer
+            thresholdToCompress = _thresholdToCompress;
+            compressor = _compressor;
         }
         finally
         {
@@ -869,18 +1145,18 @@ public class CMat : IEquatable<CMat>
         try
         {
             dst._compressedBytes = compressedBytes;
-            dst._hash = hash;
-            dst.IsInitialized = isInitialized;
-            dst.IsCompressed = isCompressed;
-            dst.ThresholdToCompress = thresholdToCompress;
-            dst.CompressionLevel = compressionLevel;
-            dst.Compressor = compressor;
-            dst.Decompressor = decompressor;
-            dst.Width = width;
-            dst.Height = height;
-            dst.Depth = depth;
-            dst.Channels = channels;
-            dst.Roi = roi;
+            dst._hash = state.Hash;
+            dst._isInitialized = state.IsInitialized;
+            dst._isCompressed = state.IsCompressed;
+            dst._thresholdToCompress = thresholdToCompress;
+            dst._compressionLevel = state.CompressionLevel;
+            dst._compressor = compressor;
+            dst._decompressor = state.Decompressor;
+            dst._width = state.Width;
+            dst._height = state.Height;
+            dst._depth = state.Depth;
+            dst._channels = state.Channels;
+            dst._roi = state.Roi;
         }
         finally
         {
@@ -905,7 +1181,13 @@ public class CMat : IEquatable<CMat>
     /// <inheritdoc />
     public override string ToString()
     {
-        return $"{nameof(Decompressor)}: {Decompressor} @ {CompressionLevel}, {nameof(Size)}: {Size}, {nameof(UncompressedLength)}: {UncompressedLength}, {nameof(CompressedLength)}: {CompressedLength}, {nameof(IsCompressed)}: {IsCompressed}, {nameof(CompressionRatio)}: {CompressionRatio}x, {nameof(CompressionPercentage)}: {CompressionPercentage}%";
+        var state = GetState();
+        var size = new Size(state.Width, state.Height);
+        var uncompressedLength = state.UncompressedLength;
+        var compressedLength = state.Bytes.Length;
+        var ratio = ComputeCompressionRatio(uncompressedLength, compressedLength);
+        var percentage = ComputeCompressionPercentage(uncompressedLength, compressedLength);
+        return $"{nameof(Decompressor)}: {state.Decompressor} @ {state.CompressionLevel}, {nameof(Size)}: {size}, {nameof(UncompressedLength)}: {uncompressedLength}, {nameof(CompressedLength)}: {compressedLength}, {nameof(IsCompressed)}: {state.IsCompressed}, {nameof(CompressionRatio)}: {ratio}x, {nameof(CompressionPercentage)}: {percentage}%";
     }
 
     #endregion
@@ -915,25 +1197,38 @@ public class CMat : IEquatable<CMat>
     /// <inheritdoc />
     public bool Equals(CMat? other)
     {
-        if (ReferenceEquals(null, other)) return false;
-        if (ReferenceEquals(this, other)) return true;
-        return IsInitialized == other.IsInitialized
-               && IsCompressed == other.IsCompressed
-               && Width == other.Width
-               && Height == other.Height
-               && Depth == other.Depth
-               && Channels == other.Channels
-               && Roi.Equals(other.Roi)
-               && CompressedLength == other.CompressedLength
-               && Hash == other.Hash;
+        if (ReferenceEquals(null, other))
+            return false;
+        if (ReferenceEquals(this, other))
+            return true;
+
+        // Each side is captured under its own lock, they are never nested so no lock ordering issues can happen
+        var left = GetState();
+        var right = other.GetState();
+
+        return left.IsInitialized == right.IsInitialized
+            && left.IsCompressed == right.IsCompressed
+            && left.Width == right.Width
+            && left.Height == right.Height
+            && left.Depth == right.Depth
+            && left.Channels == right.Channels
+            && left.Roi.Equals(right.Roi)
+            && left.Bytes.Length == right.Bytes.Length
+            && (
+                ReferenceEquals(left.Bytes, right.Bytes)
+                || ResolveHash(left) == other.ResolveHash(right)
+            );
     }
 
     /// <inheritdoc />
     public override bool Equals(object? obj)
     {
-        if (ReferenceEquals(null, obj)) return false;
-        if (ReferenceEquals(this, obj)) return true;
-        if (obj.GetType() != this.GetType()) return false;
+        if (ReferenceEquals(null, obj))
+            return false;
+        if (ReferenceEquals(this, obj))
+            return true;
+        if (obj.GetType() != this.GetType())
+            return false;
         return Equals((CMat)obj);
     }
 
@@ -959,8 +1254,22 @@ public class CMat : IEquatable<CMat>
         return !Equals(left, right);
     }
 
-    /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(Hash, Width, Height, Depth, Channels, Roi);
+    /// <summary>
+    /// Gets a hash code based on the content hash (cached after the first call) and the description of the <see cref="Mat"/>.
+    /// </summary>
+    /// <remarks>As <see cref="CMat"/> is mutable, the hash code changes when the content changes: do not mutate an instance used as a dictionary key.</remarks>
+    public override int GetHashCode()
+    {
+        var state = GetState();
+        return HashCode.Combine(
+            ResolveHash(state),
+            state.Width,
+            state.Height,
+            state.Depth,
+            state.Channels,
+            state.Roi
+        );
+    }
 
     #endregion
 }

@@ -11,12 +11,14 @@ Avalonia integration for [EmguExtensions](https://www.nuget.org/packages/EmguExt
 ## Features
 
 - Convert `Mat` to `WriteableBitmap`
-- Convert grayscale, BGR, and BGRA 8-bit Mats to Avalonia `Bgra8888`
-- Optional source color type conversion via Emgu.CV color structs
+- Convert grayscale, BGR, and BGRA 8-bit Mats to Avalonia `Bgra8888`, converting straight into the bitmap memory (no intermediate Mat)
+- Optional source color type conversion via Emgu.CV color structs (`Rgba`, `Hsv`, ...)
+- Convert other depths (16-bit, floating point) with a scale/shift to 8-bit
 - Async conversion helpers for background image preparation
-- Span and `Span2D` access over `ILockedFramebuffer`
+- Zero-copy `Mat` view over a locked framebuffer (`ToMat()`), and `WriteableBitmap.ToMat()` to get a copy
+- Span and `Span2D` access over `ILockedFramebuffer`, with `System.Drawing` and Avalonia `PixelPoint`/`PixelRect` overloads
 - Row-aware access that handles framebuffer stride/padding
-- Bitmap metadata helper via `GetBitmapInfo()`
+- Bitmap metadata helper via `GetBitmapInfo()` and safe, lock-scoped address access via `WithBitmapInfo()`
 
 ## Requirements
 
@@ -74,7 +76,21 @@ using EmguExtensions.Avalonia;
 WriteableBitmap bitmap = hsvMat.ToBitmap(typeof(Hsv));
 ```
 
-The `srcType` is passed to Emgu.CV color conversion and converted to `Bgra`.
+The `srcType` must be an Emgu.CV color struct (`Gray`, `Bgr`, `Bgra`, `Rgba`, `Hsv`, ...) with as many channels as the `Mat`, otherwise an `ArgumentException` is thrown. It is passed to Emgu.CV color conversion and converted to `Bgra`.
+
+### Convert Other Depths
+
+Mats that are not 8-bit are scaled to 8-bit with `saturate(value * scale + shift)`:
+
+```csharp
+// 16-bit grayscale: map 0..65535 to 0..255
+WriteableBitmap bitmap = mat16.ToBitmap(255.0 / 65535);
+
+// Floating point in the 0..1 range
+WriteableBitmap preview = matFloat.ToBitmap(255);
+```
+
+The source `Mat` is not modified.
 
 ### Convert on Background Thread
 
@@ -90,7 +106,19 @@ await Dispatcher.UIThread.InvokeAsync(() =>
 });
 ```
 
-`ToBitmapAsync()` uses `Task.Run`. Assign Avalonia UI properties on the UI thread.
+`ToBitmapAsync()` uses `Task.Run`: the cancellation token is only observed before the conversion starts, and the `Mat` must stay alive and unmodified until the task completes. Assign Avalonia UI properties on the UI thread.
+
+### Framebuffer to Mat
+
+```csharp
+using var framebuffer = bitmap.Lock();
+using var view = framebuffer.ToMat(); // zero-copy, honors the row stride
+
+CvInvoke.Rectangle(view, new Rectangle(10, 10, 50, 50), new MCvScalar(0, 0, 255, 255), -1);
+// Dispose the view BEFORE the framebuffer
+```
+
+The channels follow the framebuffer format (`Bgra8888` is the OpenCV BGRA order). Use `bitmap.ToMat()` to get an independent copy.
 
 ## Framebuffer Span Access
 
@@ -165,6 +193,8 @@ Span<byte> rowBytes = framebuffer.GetRowSpanOfBytes(y: 5);
 Span<uint> rowPixels = framebuffer.GetRowSpan(y: 5);
 ```
 
+`GetRowSpanOfBytes` returns the pixel data of the row without the padding; pass an explicit `length` to reach into it (up to the row stride). A `length` of `0` means "everything available", negative values throw.
+
 ### ROI Spans
 
 ```csharp
@@ -173,7 +203,7 @@ using EmguExtensions.Avalonia;
 
 using var framebuffer = bitmap.Lock();
 
-var roi = new Rectangle(10, 10, 100, 80);
+var roi = new Rectangle(10, 10, 100, 80); // or an Avalonia PixelRect
 
 Span2D<byte> roiBytes = framebuffer.GetSpan2DOfBytes(roi);
 Span2D<uint> roiPixels = framebuffer.GetSpan2D(roi);
@@ -186,15 +216,24 @@ using EmguExtensions.Avalonia;
 
 BitmapInfo info = bitmap.GetBitmapInfo();
 
-Console.WriteLine($"{info.Width}x{info.Height}, row bytes: {info.RowBytes}");
+Console.WriteLine($"{info.Width}x{info.Height}, row bytes (stride): {info.RowBytes}");
+
+// The address is only valid while the bitmap is locked, so it is only exposed inside the callback
+bitmap.WithBitmapInfo(info =>
+{
+    nint address = info.Address;
+    // ...
+});
 ```
+
+`GetBitmapInfo()` never returns the memory address (`Address` is `IntPtr.Zero`), because the bitmap memory is only guaranteed while it is locked.
 
 ## Limitations
 
-- Only `DepthType.Cv8U` Mats are supported.
-- `ToBitmap()` supports 1, 3, and 4 channel Mats.
+- `ToBitmap()` and `ToBitmap(srcType)` only support `DepthType.Cv8U` Mats, use `ToBitmap(scale, shift)` for other depths.
+- Mats must have 1, 3, or 4 channels.
 - Output bitmap format is always `PixelFormat.Bgra8888` with `AlphaFormat.Unpremul`.
-- A 4-channel Mat is copied directly, so it should already be BGRA-compatible.
+- A 4-channel Mat is copied directly unless a different `srcType` (e.g. `Rgba`) is given, so it should already be BGRA-compatible.
 - Framebuffer spans are valid only while the framebuffer lock is alive.
 - Flat `Span<uint>` access requires a 32-bit continuous framebuffer. Use 2D spans for padded rows.
 

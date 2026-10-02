@@ -119,7 +119,8 @@ public sealed class MatCompressorBrotli : MatCompressor
             throw new InvalidDataException("Failed to compress Brotli data.");
         }
 
-        if (bytesWritten == 0) return [];
+        // Non-empty input always produces output; an empty result would be mistaken for "no data" by callers
+        if (bytesWritten == 0) throw new InvalidDataException("Brotli produced no output for a non-empty source.");
 
         var result = GC.AllocateUninitializedArray<byte>(bytesWritten);
         destination[..bytesWritten].CopyTo(result);

@@ -1242,7 +1242,7 @@ public static partial class EmguCvExtensions
         /// </exception>
         public Memory2D<T> GetMemory2D<T>(Rectangle roi) where T : unmanaged
         {
-            if (roi.Width <= 0 || roi.Height <= 0 || !ValidateRoi(src, roi)) return Memory2D<T>.Empty;
+            if (!ValidateRoi(src, roi)) return Memory2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
@@ -1287,7 +1287,7 @@ public static partial class EmguCvExtensions
         /// </exception>
         public ReadOnlyMemory2D<T> GetReadOnlyMemory2D<T>(Rectangle roi) where T : unmanaged
         {
-            if (roi.Width <= 0 || roi.Height <= 0 || !ValidateRoi(src, roi)) return ReadOnlyMemory2D<T>.Empty;
+            if (!ValidateRoi(src, roi)) return ReadOnlyMemory2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
@@ -1485,7 +1485,8 @@ public static partial class EmguCvExtensions
         public bool SanitizeRoiWithBehavior(ref Rectangle roi,
             EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
         {
-            if (roi.IsEmpty)
+            // Rectangle.IsEmpty is only true when X, Y, Width and Height are all zero, a ROI without area is empty regardless of its location
+            if (roi.Width <= 0 || roi.Height <= 0)
             {
                 switch (emptyRoiBehavior)
                 {
@@ -2332,45 +2333,8 @@ public static partial class EmguCvExtensions
 
             if (vertically)
             {
-                var span = src.GetReadOnlySpan2D<byte>();
-                for (x = 0; x < matSize.Width; x++)
-                {
-                    line.StartX = x + offset.X;
-                    line.StartY = offset.Y;
-                    line.EndX = x + offset.X;
-                    line.EndY = offset.Y;
-                    line.Grey = 0;
-
-                    for (y = 0; y < matSize.Height; y++)
-                    {
-                        grey = span[y, x];
-                        if (useThreshold)
-                        {
-                            grey = grey <= thresholdGrey ? byte.MinValue : byte.MaxValue;
-                        }
-
-                        if (line.Grey == 0)
-                        {
-                            if (grey == 0) continue;
-                            line.StartY = y + offset.Y;
-                            line.Grey = grey;
-                            continue;
-                        }
-
-                        if (grey == line.Grey) continue;
-                        line.EndY = y - 1 + offset.Y;
-                        lines.Add(line);
-
-                        line.Grey = 0;
-                        y--;
-                    }
-
-                    if (line.Grey > 0)
-                    {
-                        line.EndY = y - 1 + offset.Y;
-                        lines.Add(line);
-                    }
-                }
+                // Scanned row by row (cache friendly) with per-column run state, instead of walking the columns
+                return ScanLinesVertically(src, new ThresholdGreyMapper(thresholdGrey, useThreshold), offset);
             }
             else // Horizontal
             {
@@ -2444,41 +2408,7 @@ public static partial class EmguCvExtensions
 
             if (vertically)
             {
-                var span = src.GetReadOnlySpan2D<byte>();
-                for (x = 0; x < matSize.Width; x++)
-                {
-                    line.StartX = x + offset.X;
-                    line.StartY = offset.Y;
-                    line.EndX = x + offset.X;
-                    line.EndY = offset.Y;
-                    line.Grey = 0;
-
-                    for (y = 0; y < matSize.Height; y++)
-                    {
-                        grey = greyFunc(span[y, x]);
-
-                        if (line.Grey == 0)
-                        {
-                            if (grey == 0) continue;
-                            line.StartY = y + offset.Y;
-                            line.Grey = grey;
-                            continue;
-                        }
-
-                        if (grey == line.Grey) continue;
-                        line.EndY = y - 1 + offset.Y;
-                        lines.Add(line);
-
-                        line.Grey = 0;
-                        y--;
-                    }
-
-                    if (line.Grey > 0)
-                    {
-                        line.EndY = y - 1 + offset.Y;
-                        lines.Add(line);
-                    }
-                }
+                return ScanLinesVertically(src, new FuncGreyMapper(greyFunc), offset);
             }
             else
             {
@@ -2600,10 +2530,10 @@ public static partial class EmguCvExtensions
         /// </summary>
         /// <param name="contours">The contours to draw on the mask.</param>
         /// <param name="offset">An optional offset applied to all contour points.</param>
-        /// <returns>A new single-channel matrix with the contour regions filled in white.</returns>
+        /// <returns>A new 8-bit single-channel matrix, with the size of the source, with the contour regions filled in white.</returns>
         public Mat CreateMask(VectorOfVectorOfPoint contours, Point offset = default)
         {
-            var mask = src.NewZeros();
+            var mask = InitMat(src.Size); // Always an 8-bit single-channel mask, regardless of the source type
             CvInvoke.DrawContours(mask, contours, -1, WhiteColor, -1, LineType.EightConnected, null, int.MaxValue,
                 offset);
             return mask;
@@ -2642,7 +2572,7 @@ public static partial class EmguCvExtensions
                     using var selectedContours = new VectorOfVectorOfPoint();
                     foreach (var group in contourGroup)
                     {
-                        var area = EmguContours.GetContourArea(group);
+                        var area = EmguContours.GetContourGroupArea(group);
                         if (area >= threshold) continue;
                         drawContours++;
                         selectedContours.Push(group);
@@ -2687,7 +2617,7 @@ public static partial class EmguCvExtensions
                     using var selectedContours = new VectorOfVectorOfPoint();
                     foreach (var group in contourGroup)
                     {
-                        var area = EmguContours.GetContourArea(group);
+                        var area = EmguContours.GetContourGroupArea(group);
                         if (area <= threshold) continue;
                         drawContours++;
                         selectedContours.Push(group);
@@ -2792,17 +2722,17 @@ public static partial class EmguCvExtensions
                         var firstPoint = points[0];
                         buffer.Add('M');
                         buffer.Add(' ');
-                        buffer.Write($"{firstPoint.X}");
+                        WriteInvariant(ref buffer, firstPoint.X);
                         buffer.Add(' ');
-                        buffer.Write($"{firstPoint.Y}");
+                        WriteInvariant(ref buffer, firstPoint.Y);
                         buffer.Write(" L");
                         for (var x = 1; x < points.Length; x++)
                         {
                             var pt = points[x];
                             buffer.Add(' ');
-                            buffer.Write($"{pt.X}");
+                            WriteInvariant(ref buffer, pt.X);
                             buffer.Add(' ');
-                            buffer.Write($"{pt.Y}");
+                            WriteInvariant(ref buffer, pt.Y);
                         }
 
                         buffer.Write(" Z");
@@ -2891,7 +2821,9 @@ public static partial class EmguCvExtensions
 
             // Create letterboxed image
             using Mat resized = new();
-            CvInvoke.Resize(src, resized, new Size(newWidth, newHeight), 0, 0, Inter.Linear);
+            // Area interpolation avoids aliasing when shrinking, linear is the better choice when enlarging
+            CvInvoke.Resize(src, resized, new Size(newWidth, newHeight), 0, 0,
+                scale < 1f ? Inter.Area : Inter.Linear);
 
             // Create padded image
             var letterboxed = new Mat(targetSize, src.Depth, src.NumberOfChannels);
@@ -3045,8 +2977,9 @@ public static partial class EmguCvExtensions
             var sin = Math.Abs(translateTransform[0, 1]);
 
             // compute the new bounding dimensions of the image
-            var newWidth = (int)(src.Height * sin + src.Width * cos);
-            var newHeight = (int)(src.Height * cos + src.Width * sin);
+            // Round up (tolerating floating point noise) so the rotated content is never cropped by a pixel
+            var newWidth = (int)Math.Ceiling(src.Height * sin + src.Width * cos - 1e-6);
+            var newHeight = (int)Math.Ceiling(src.Height * cos + src.Width * sin - 1e-6);
 
             // adjust the rotation matrix to take into account translation
             translateTransform[0, 2] += newWidth / 2.0 - halfWidth;
@@ -3081,8 +3014,12 @@ public static partial class EmguCvExtensions
         /// <param name="interpolation"></param>
         public void Resize(double scale, Inter interpolation = Inter.Linear)
         {
+            if (!double.IsFinite(scale) || scale <= 0)
+                throw new ArgumentOutOfRangeException(nameof(scale), scale, "Scale must be a finite value greater than zero.");
             if (Math.Abs(scale - 1) < 0.001) return;
-            CvInvoke.Resize(src, src, new Size((int)(src.Width * scale), (int)(src.Height * scale)), 0, 0,
+            // Never collapse a dimension to zero, OpenCV rejects empty destination sizes
+            CvInvoke.Resize(src, src,
+                new Size(Math.Max(1, (int)(src.Width * scale)), Math.Max(1, (int)(src.Height * scale))), 0, 0,
                 interpolation);
         }
 
@@ -3096,11 +3033,15 @@ public static partial class EmguCvExtensions
         /// <returns><see langword="true"/> if the image was shrunk; otherwise <see langword="false"/>.</returns>
         public bool ShrinkToFitPreserveAspect(int maxWidth, int maxHeight, Inter interpolation = Inter.Linear)
         {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxWidth);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxHeight);
+
             var scale = Math.Min((double)maxWidth / src.Width, (double)maxHeight / src.Height);
             if (scale >= 1.0) return false;
 
+            // Never collapse a dimension to zero (e.g. a 10000x1 image), OpenCV rejects empty destination sizes
             CvInvoke.Resize(src, src,
-                new Size((int)(src.Width * scale), (int)(src.Height * scale)),
+                new Size(Math.Max(1, (int)(src.Width * scale)), Math.Max(1, (int)(src.Height * scale))),
                 0, 0, interpolation);
             return true;
         }
@@ -3116,6 +3057,10 @@ public static partial class EmguCvExtensions
         /// <returns><see langword="true"/> if the image was shrunk; otherwise <see langword="false"/>.</returns>
         public bool ShrinkToFitPreserveAspect(Mat dst, int maxWidth, int maxHeight, Inter interpolation = Inter.Linear)
         {
+            ArgumentNullException.ThrowIfNull(dst);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxWidth);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxHeight);
+
             var scale = Math.Min((double)maxWidth / src.Width, (double)maxHeight / src.Height);
             if (scale >= 1.0)
             {
@@ -3128,7 +3073,7 @@ public static partial class EmguCvExtensions
             }
 
             CvInvoke.Resize(src, dst,
-                new Size((int)(src.Width * scale), (int)(src.Height * scale)),
+                new Size(Math.Max(1, (int)(src.Width * scale)), Math.Max(1, (int)(src.Height * scale))),
                 0, 0, interpolation);
             return true;
         }
@@ -3377,10 +3322,10 @@ public static partial class EmguCvExtensions
         /// Draws a regular polygon with the specified number of sides, diameter, and center, aligned according to the
         /// given starting angle and optional flip transformation.
         /// </summary>
-        /// <remarks>If the number of sides is 4, the polygon is not drawn. The polygon is aligned so that
-        /// its first vertex is placed according to the specified starting angle, and the remaining vertices are
-        /// distributed evenly around the center.</remarks>
-        /// <param name="sides">The number of sides for the polygon. Must be 3 or greater, but not equal to 4.</param>
+        /// <remarks>The alignment offset is applied for 3 or more sides, except for 4 sides (a square is already
+        /// aligned, so only the <paramref name="startingAngle"/> is used). The remaining vertices are
+        /// distributed evenly around the center. Special values behave as in <c>DrawPolygon</c>: 1 draws a line and 100 or more draws a circle.</remarks>
+        /// <param name="sides">The number of sides for the polygon. Use 3 or greater to draw a polygon, 1 to draw a line and 100 or greater to draw a circle.</param>
         /// <param name="diameter">The diameter of the polygon, measured from one vertex to the opposite vertex.</param>
         /// <param name="center">The center point of the polygon in image coordinates.</param>
         /// <param name="color">The color used to draw the polygon.</param>
@@ -3468,21 +3413,67 @@ public static partial class EmguCvExtensions
                 return;
             }
 
-            using var rotatedSrc = src.Clone();
-            rotatedSrc.RotateAdjustBounds(-angle);
-            org.Offset((rotatedSrc.Width - src.Width) / 2, (rotatedSrc.Height - src.Height) / 2);
-            org = org.Rotate(-angle, new Point(rotatedSrc.Size.Width / 2, rotatedSrc.Size.Height / 2));
-            rotatedSrc.PutTextExtended(text, org, fontFace, fontScale, color, thickness, lineGapOffset, lineType,
+            ArgumentNullException.ThrowIfNull(text);
+            if (src.IsEmpty) return;
+
+            // Instead of rotating copies of the whole image, the text is rendered on a small layer around its origin:
+            // the layer is the text bounds, with the text origin at (margin, extentY), the text spans at most
+            // extentY above or below its origin (multiline and bottom-left origin grow in either direction)
+            var baseLine = 0;
+            var textSize = GetTextSizeExtended(text, fontFace, fontScale, thickness, lineGapOffset, ref baseLine,
+                lineAlignment);
+            var margin = thickness + 2;
+            var extentY = textSize.Height + baseLine + margin;
+            var layerSize = new Size(textSize.Width + margin * 2, extentY * 2);
+            var layerOrg = new Point(margin, extentY);
+
+            // Forward transform layer -> src: rotates around the text origin, then moves the origin into place
+            using var forward = new Matrix<double>(2, 3);
+            CvInvoke.GetRotationMatrix2D(new PointF(layerOrg.X, layerOrg.Y), -angle, 1.0, forward);
+            forward[0, 2] += org.X - layerOrg.X;
+            forward[1, 2] += org.Y - layerOrg.Y;
+
+            // Bounds of the rotated layer inside src, nothing to draw when it is entirely outside
+            double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+            for (var i = 0; i < 4; i++)
+            {
+                var cornerX = (i & 1) == 0 ? 0 : layerSize.Width;
+                var cornerY = (i & 2) == 0 ? 0 : layerSize.Height;
+                var x = forward[0, 0] * cornerX + forward[0, 1] * cornerY + forward[0, 2];
+                var y = forward[1, 0] * cornerX + forward[1, 1] * cornerY + forward[1, 2];
+                minX = Math.Min(minX, x);
+                minY = Math.Min(minY, y);
+                maxX = Math.Max(maxX, x);
+                maxY = Math.Max(maxY, y);
+            }
+
+            var region = Rectangle.Intersect(
+                Rectangle.FromLTRB((int)Math.Floor(minX) - 1, (int)Math.Floor(minY) - 1,
+                    (int)Math.Ceiling(maxX) + 1, (int)Math.Ceiling(maxY) + 1),
+                new Rectangle(Point.Empty, src.Size));
+            if (region.Width <= 0 || region.Height <= 0) return;
+
+            // Background of the layer is the (inverse rotated) image, so the anti-aliased text edges blend with the real background
+            using var layer = new Mat();
+            CvInvoke.WarpAffine(src, layer, forward, layerSize, Inter.Linear, Warp.InverseMap, BorderType.Replicate);
+            layer.PutTextExtended(text, layerOrg, fontFace, fontScale, color, thickness, lineGapOffset, lineType,
                 bottomLeftOrigin, lineAlignment);
 
-            using var mask = rotatedSrc.NewZeros();
-            mask.PutTextExtended(text, org, fontFace, fontScale, WhiteColor, thickness, lineGapOffset, lineType,
-                bottomLeftOrigin, lineAlignment);
+            using var layerMask = InitMat(layerSize);
+            layerMask.PutTextExtended(text, layerOrg, fontFace, fontScale, WhiteColor, thickness, lineGapOffset,
+                lineType, bottomLeftOrigin, lineAlignment);
 
-            rotatedSrc.RotateFromCenter(angle, src.Size);
-            mask.RotateFromCenter(angle, src.Size);
+            // Rotate the layer and its mask back into the region of src that they cover, and copy through the mask
+            forward[0, 2] -= region.X;
+            forward[1, 2] -= region.Y;
+            using var regionLayer = new Mat();
+            using var regionMask = new Mat();
+            CvInvoke.WarpAffine(layer, regionLayer, forward, region.Size, Inter.Linear, Warp.Default,
+                BorderType.Replicate);
+            CvInvoke.WarpAffine(layerMask, regionMask, forward, region.Size);
 
-            rotatedSrc.CopyTo(src, mask);
+            using var srcRegion = new Mat(src, region);
+            regionLayer.CopyTo(srcRegion, regionMask);
         }
 
         #endregion
@@ -3629,7 +3620,7 @@ public static partial class EmguCvExtensions
                 Address = src.DataPointer,
                 Width = src.Width,
                 Height = src.Height,
-                RowBytes = src.RealStep,
+                RowBytes = src.Step, // The real row pitch, which is bigger than the row data for non-continuous Mats (e.g. ROIs)
                 BytesPerPixel = src.ElementSize,
                 IsContiguous = src.IsContinuous
             };

@@ -62,6 +62,9 @@ public sealed class MatCompressorPng : MatCompressor
     }
 
     /// <inheritdoc />
+    protected override bool AllocatesDestination => true;
+
+    /// <inheritdoc />
     protected override byte[] CompressCore(Mat src, int compressionLevel)
     {
         return src.GetPngBytes(compressionLevel);
@@ -70,6 +73,33 @@ public sealed class MatCompressorPng : MatCompressor
     /// <inheritdoc />
     protected override void DecompressCore(byte[] compressedBytes, Mat dst)
     {
-        CvInvoke.Imdecode(compressedBytes, ImreadModes.Unchanged, dst);
+        // Imdecode does not throw on corrupt or truncated data, it just returns an empty result, and it leaves a
+        // pre-allocated destination untouched: so the result is only trusted after checking it
+        if (dst.IsEmpty)
+        {
+            CvInvoke.Imdecode(compressedBytes, ImreadModes.Unchanged, dst);
+            if (dst.IsEmpty)
+                throw new InvalidDataException("Failed to decode PNG data.");
+            return;
+        }
+
+        // Pre-allocated destination (it can be a ROI of a bigger Mat): decode aside and copy into it
+        using var decoded = new Mat();
+        CvInvoke.Imdecode(compressedBytes, ImreadModes.Unchanged, decoded);
+        if (decoded.IsEmpty)
+            throw new InvalidDataException("Failed to decode PNG data.");
+
+        if (
+            decoded.Size != dst.Size
+            || decoded.Depth != dst.Depth
+            || decoded.NumberOfChannels != dst.NumberOfChannels
+        )
+        {
+            throw new InvalidDataException(
+                $"The decoded PNG ({decoded.Width}x{decoded.Height}, {decoded.Depth}, {decoded.NumberOfChannels} channel(s)) does not match the destination Mat ({dst.Width}x{dst.Height}, {dst.Depth}, {dst.NumberOfChannels} channel(s))."
+            );
+        }
+
+        decoded.CopyTo(dst);
     }
 }

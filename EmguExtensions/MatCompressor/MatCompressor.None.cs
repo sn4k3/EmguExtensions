@@ -52,6 +52,25 @@ public sealed class MatCompressorNone : MatCompressor
     /// <inheritdoc />
     protected override void DecompressCore(byte[] compressedBytes, Mat dst)
     {
-        dst.SetTo(compressedBytes);
+        if (compressedBytes.Length != dst.ByteCountInt32)
+        {
+            throw new InvalidDataException(
+                $"The raw data length ({compressedBytes.Length}) does not match the destination Mat size ({dst.ByteCountInt32})."
+            );
+        }
+
+        if (dst.IsContinuous)
+        {
+            compressedBytes.CopyTo(dst.GetSpan<byte>());
+            return;
+        }
+
+        var offset = 0;
+        for (var row = 0; row < dst.Height; row++)
+        {
+            var rowSpan = dst.GetRowSpanOfBytes(row);
+            compressedBytes.AsSpan(offset, rowSpan.Length).CopyTo(rowSpan);
+            offset += rowSpan.Length;
+        }
     }
 }

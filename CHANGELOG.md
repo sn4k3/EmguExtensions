@@ -1,3 +1,55 @@
+# v0.2.1 (02/10/2026)
+
+- `MatCompressor` & Subclasses:
+  - `Decompress`/`DecompressAsync` now throw `ArgumentException` for an empty destination `Mat` on compressors that do
+    not allocate it (everything except PNG), instead of silently returning an empty result
+  - `PNG`: throw `InvalidDataException` on corrupt data (OpenCV did not report it) and decode into pre-allocated
+    destinations (including ROIs) with size/type validation
+  - `None`: copy with a length check instead of Emgu's unchecked `SetTo(byte[])`, and support non-continuous destinations
+  - `Brotli`: never return an empty result for a non-empty source
+  - Cache `Id`, drop redundant `async`/`await` wrappers and document the integer compression levels, the
+    non-interruptible async work and the non-thread-safe `AvailableCompressors`
+- `CMat`:
+  - Thread safety: every property read and the `Compressor`/`CompressionLevel`/`ThresholdToCompress` setters now go
+    through the lock, and `Equals`, `GetHashCode`, `ToString` and the ratio properties work on a consistent snapshot;
+    the hash is computed outside the lock
+  - Fix silent data loss when a compressor returns an empty result, store raw for the `None` compressor without a
+    wasted compress pass, and only fall back to raw on codec errors (`ArgumentException`s now propagate)
+  - Fix `SetCompressedBytes` keeping a stale `Roi` and document that it takes ownership of the array
+  - Validate the decompressed size/type against the cached description (`InvalidDataException` on mismatch)
+  - **Breaking (binary):** the `compressionLevel` constructor parameter is now `CompressionLevel?` and defaults to
+    `MatCompressor.DefaultCompressionLevel`
+- `EmguCvExtensions`:
+  - `PutTextRotated`: render on a small layer instead of rotating copies of the whole image (about 30x faster on a 12MP
+    image) and rotate exactly around the text origin
+  - Vertical `ScanLines` walks the image row by row (cache friendly), same results and ordering
+  - `GetSvgPath` formats coordinates without allocations and with the invariant culture
+  - `Resize` and `ShrinkToFitPreserveAspect` never produce a zero-sized image and validate their arguments
+  - `CreateLetterBox` uses area interpolation when shrinking, `RotateAdjustBounds` rounds the bounds up
+  - `CreateMask` now always returns an 8-bit single-channel mask, as documented
+  - `SanitizeRoiWithBehavior` treats any ROI without area as empty, `GetMemory2D(roi)` validates like `GetSpan2D(roi)`
+  - `CopyAreasSmallerThan`/`CopyAreasLargerThan` add islands nested inside holes to the area of their group
+  - Document `Kernel3X3Rectangle` as a shared read-only instance
+- `DrawingExtensions.FactorColor` rounds instead of truncating; add `PointExtensions.FindLength(PointF, PointF)`
+- `BitmapInfo`/`Mat.GetBitmapInfo()`: `RowBytes` is now the real stride (`Mat.Step`), it was the row data size, which was
+  wrong for ROI Mats
+- `EmguExtensions.Avalonia`:
+  - `ToBitmap`: convert straight into the locked bitmap memory through a `Mat` view, without an intermediate Mat, and
+    validate the Mat (channels, depth, color type) before allocating the bitmap
+  - `ToBitmap(Type srcType)`: validate that `srcType` is an Emgu color matching the channel count, and honor it for
+    4-channel Mats (e.g. `Rgba`), which were always copied as BGRA
+  - Add `ToBitmap(scale, shift)`/`ToBitmapAsync` to convert 16-bit, floating point and other depths to 8-bit
+  - Add `ILockedFramebuffer.ToMat()` (zero-copy view honoring the stride) and `WriteableBitmap.ToMat()` (copy)
+  - **Breaking:** `WriteableBitmap.GetBitmapInfo()` no longer returns the memory address (it was only valid while the
+    bitmap was locked): use the new `WithBitmapInfo` to access it inside a lock
+  - **Breaking:** `ILockedFramebuffer.GetRowSpanOfBytes` excludes the row padding by default (like `GetRowSpan` and the
+    core `Mat` accessors), a negative `length` now throws instead of meaning "all", and `GetPixelBytePos`/`GetPixelPos`
+    validate the coordinates
+  - Add `PixelPoint`/`PixelRect` overloads next to the `System.Drawing` ones, `ByteCountInt64`, checked size
+    calculations, and document that the spans are only valid while the framebuffer is locked
+  - Reference `CommunityToolkit.HighPerformance` explicitly and add a test suite running on the Avalonia headless
+    platform
+
 # v0.2.0 (20/09/2026)
 
 - `EmguCvExtensions`:

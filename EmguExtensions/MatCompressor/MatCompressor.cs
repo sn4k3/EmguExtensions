@@ -53,9 +53,11 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <summary>
     /// Gets a collection of available material compressors supported by the system.
     /// </summary>
-    /// <remarks>The collection includes built-in compressors such as None, PNG, Deflate, GZip, ZLib, and Brotli.
-    /// The collection is read-only and can be used to enumerate or select a compressor for material processing
-    /// operations.</remarks>
+    /// <remarks>
+    /// The collection includes built-in compressors such as None, PNG, Deflate, GZip, ZLib, and Brotli.<br/>
+    /// The collection is not thread-safe: register custom compressors once during application startup,
+    /// before any <see cref="GetCompressorById"/> or <see cref="GetCompressorByName"/> lookups run concurrently.
+    /// </remarks>
     public static ObservableCollection<MatCompressor> AvailableCompressors { get; } =
     [
         MatCompressorNone.Instance,
@@ -109,7 +111,9 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// Gets a unique identifier for the compressor, combining the provider and name properties.
     /// This can be useful for distinguishing between different compressors, especially if multiple compressors share the same name but come from different providers or libraries.
     /// </summary>
-    public string Id => $"{Provider}#{Name}";
+    public string Id => _id ??= $"{Provider}#{Name}";
+
+    private string? _id;
 
     /// <summary>
     /// Gets the provider or library used by this compressor, if applicable.
@@ -126,15 +130,22 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
 
     /// <summary>
     /// Gets the minimum compression level supported by this compressor. This can be used to validate user input or to provide information about the range of valid compression levels for this compressor.<br/>
-    /// By default, it returns 0, which typically represents the lowest level of compression (or no compression) in many compression libraries, but derived classes can override this property to specify a different minimum level if their compression algorithm uses a different scale or range for compression levels.
+    /// By default, it returns 0 and the integer levels are the numeric values of <see cref="CompressionLevel"/> (<c>0</c> = <see cref="CompressionLevel.Optimal"/>, <c>1</c> = <see cref="CompressionLevel.Fastest"/>, <c>2</c> = <see cref="CompressionLevel.NoCompression"/>, <c>3</c> = <see cref="CompressionLevel.SmallestSize"/>), which is NOT an ascending compression scale.
+    /// Compressors with a native scale (e.g. PNG, Brotli) override this together with <see cref="GetCompressionLevel"/>. Prefer the <see cref="CompressionLevel"/> overloads of <c>Compress</c> unless a native level is required.
     /// </summary>
     public virtual int MinimumCompressionLevel => 0;
 
     /// <summary>
     /// Gets the maximum compression level supported by this compressor. This can be used to validate user input or to provide information about the range of valid compression levels for this compressor.<br/>
-    /// By default, it returns <see cref="CompressionLevel.SmallestSize"/> which is <c>3</c>, which typically represents the highest level of compression in many compression libraries, but derived classes can override this property to specify a different maximum level if their compression algorithm uses a different scale or range for compression levels.
+    /// By default, it returns <see cref="CompressionLevel.SmallestSize"/> which is <c>3</c>. See <see cref="MinimumCompressionLevel"/> for how the default integer levels map to <see cref="CompressionLevel"/>; derived classes override this when their algorithm uses a different scale.
     /// </summary>
     public virtual int MaximumCompressionLevel => 3;
+
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Decompress"/> allocates the destination itself when an empty <see cref="Mat"/> is passed (e.g. image codecs).<br/>
+    /// When <see langword="false"/> (default) the destination must already be allocated with the exact size and type of the decompressed data.
+    /// </summary>
+    protected virtual bool AllocatesDestination => false;
 
     /// <summary>
     /// Gets the growth strategy used by stream-based compressors.
@@ -186,10 +197,15 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     {
         if (MinimumCompressionLevel == MaximumCompressionLevel)
             return; // No validation needed if there's only one valid level. Often this is None compression.
-        if (compressionLevel < MinimumCompressionLevel || compressionLevel > MaximumCompressionLevel)
+        if (
+            compressionLevel < MinimumCompressionLevel
+            || compressionLevel > MaximumCompressionLevel
+        )
         {
-            throw new ArgumentOutOfRangeException(nameof(compressionLevel),
-                $"Compression level must be between {MinimumCompressionLevel} and {MaximumCompressionLevel} for compressor '{Name}' from '{Provider}'.");
+            throw new ArgumentOutOfRangeException(
+                nameof(compressionLevel),
+                $"Compression level must be between {MinimumCompressionLevel} and {MaximumCompressionLevel} for compressor '{Name}' from '{Provider}'."
+            );
         }
     }
 
@@ -206,7 +222,8 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     public byte[] Compress(Mat src, int compressionLevel)
     {
         ArgumentNullException.ThrowIfNull(src);
-        if (src.IsEmpty) return [];
+        if (src.IsEmpty)
+            return [];
         ValidateCompressionLevel(compressionLevel);
         return CompressCore(src, compressionLevel);
     }
@@ -247,14 +264,19 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <param name="compressionLevel">The compression level to use.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains a byte array with the compressed data.</returns>
-    public async Task<byte[]> CompressAsync(Mat src, int compressionLevel,
-        CancellationToken cancellationToken = default)
+    public async Task<byte[]> CompressAsync(
+        Mat src,
+        int compressionLevel,
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(src);
-        if (src.IsEmpty) return [];
+        if (src.IsEmpty)
+            return [];
         cancellationToken.ThrowIfCancellationRequested();
         ValidateCompressionLevel(compressionLevel);
-        return await CompressCoreAsync(src, compressionLevel, cancellationToken).ConfigureAwait(false);
+        return await CompressCoreAsync(src, compressionLevel, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -264,10 +286,13 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <param name="compressionLevel">The compression level to use.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains a byte array with the compressed data.</returns>
-    public async Task<byte[]> CompressAsync(Mat src, CompressionLevel compressionLevel,
-        CancellationToken cancellationToken = default)
+    public Task<byte[]> CompressAsync(
+        Mat src,
+        CompressionLevel compressionLevel,
+        CancellationToken cancellationToken = default
+    )
     {
-        return await CompressAsync(src, GetCompressionLevel(compressionLevel), cancellationToken).ConfigureAwait(false);
+        return CompressAsync(src, GetCompressionLevel(compressionLevel), cancellationToken);
     }
 
     /// <summary>
@@ -276,36 +301,62 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <param name="src">The source <see cref="Mat"/> to compress.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains a byte array with the compressed data.</returns>
-    public async Task<byte[]> CompressAsync(Mat src, CancellationToken cancellationToken = default)
+    public Task<byte[]> CompressAsync(Mat src, CancellationToken cancellationToken = default)
     {
-        return await CompressAsync(src, GetCompressionLevel(DefaultCompressionLevel), cancellationToken)
-            .ConfigureAwait(false);
+        return CompressAsync(src, GetCompressionLevel(DefaultCompressionLevel), cancellationToken);
     }
 
     /// <summary>
     /// Compresses the <see cref="Mat"/> into a byte array asynchronously. This method offloads the compression work to a background thread, allowing the calling thread to continue executing without blocking. It is useful for scenarios where compression may take a significant amount of time and you want to keep the UI responsive or perform other tasks concurrently.
     /// </summary>
+    /// <remarks>
+    /// The <paramref name="cancellationToken"/> is only observed before the work starts; the compression itself is not interruptible.
+    /// The caller must keep <paramref name="src"/> alive and unmodified until the returned task completes.
+    /// </remarks>
     /// <param name="src">The source <see cref="Mat"/> to compress.</param>
     /// <param name="compressLevel">The compression level to use.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains a byte array with the compressed data.</returns>
-    protected virtual async Task<byte[]> CompressCoreAsync(Mat src, int compressLevel,
-        CancellationToken cancellationToken = default)
+    protected virtual Task<byte[]> CompressCoreAsync(
+        Mat src,
+        int compressLevel,
+        CancellationToken cancellationToken = default
+    )
     {
-        return await Task.Run(() => CompressCore(src, compressLevel), cancellationToken).ConfigureAwait(false);
+        return Task.Run(() => CompressCore(src, compressLevel), cancellationToken);
     }
 
     /// <summary>
     /// Decompresses the <see cref="Mat"/> from a byte array.
     /// </summary>
     /// <param name="compressedBytes">The byte array containing the compressed data.</param>
-    /// <param name="dst">The destination <see cref="Mat"/> to store the decompressed data.</param>
+    /// <param name="dst">The destination <see cref="Mat"/> to store the decompressed data.
+    /// It must already be allocated with the size and type of the decompressed data, unless the compressor allocates it itself (see <see cref="AllocatesDestination"/>, e.g. PNG).</param>
+    /// <exception cref="ArgumentException"><paramref name="dst"/> is empty and the compressor does not allocate the destination.</exception>
     public void Decompress(byte[] compressedBytes, Mat dst)
     {
         ArgumentNullException.ThrowIfNull(compressedBytes);
         ArgumentNullException.ThrowIfNull(dst);
-        if (compressedBytes.Length == 0) return;
+        if (compressedBytes.Length == 0)
+            return;
+        ValidateDestination(dst);
         DecompressCore(compressedBytes, dst);
+    }
+
+    /// <summary>
+    /// Validates that <paramref name="dst"/> can receive decompressed data.
+    /// </summary>
+    /// <param name="dst">The destination <see cref="Mat"/>.</param>
+    /// <exception cref="ArgumentException"><paramref name="dst"/> is empty and the compressor does not allocate the destination.</exception>
+    private void ValidateDestination(Mat dst)
+    {
+        if (dst.IsEmpty && !AllocatesDestination)
+        {
+            throw new ArgumentException(
+                $"The destination Mat must be allocated before decompressing with compressor '{Name}' from '{Provider}'.",
+                nameof(dst)
+            );
+        }
     }
 
     /// <summary>
@@ -315,11 +366,17 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <param name="dst">The destination <see cref="Mat"/> to store the decompressed data.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    public async Task DecompressAsync(byte[] compressedBytes, Mat dst, CancellationToken cancellationToken = default)
+    public async Task DecompressAsync(
+        byte[] compressedBytes,
+        Mat dst,
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(compressedBytes);
         ArgumentNullException.ThrowIfNull(dst);
-        if (compressedBytes.Length == 0) return;
+        if (compressedBytes.Length == 0)
+            return;
+        ValidateDestination(dst);
         cancellationToken.ThrowIfCancellationRequested();
         await DecompressCoreAsync(compressedBytes, dst, cancellationToken).ConfigureAwait(false);
     }
@@ -338,10 +395,13 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <param name="dst">The destination <see cref="Mat"/> to store the decompressed data.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    protected virtual async Task DecompressCoreAsync(byte[] compressedBytes, Mat dst,
-        CancellationToken cancellationToken = default)
+    protected virtual Task DecompressCoreAsync(
+        byte[] compressedBytes,
+        Mat dst,
+        CancellationToken cancellationToken = default
+    )
     {
-        await Task.Run(() => DecompressCore(compressedBytes, dst), cancellationToken).ConfigureAwait(false);
+        return Task.Run(() => DecompressCore(compressedBytes, dst), cancellationToken);
     }
 
     #endregion
@@ -351,17 +411,21 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <inheritdoc />
     public bool Equals(MatCompressor? other)
     {
-        if (other is null) return false;
-        if (ReferenceEquals(this, other)) return true;
+        if (other is null)
+            return false;
+        if (ReferenceEquals(this, other))
+            return true;
         return string.Equals(Provider, other.Provider, StringComparison.Ordinal)
-               && string.Equals(Name, other.Name, StringComparison.Ordinal);
+            && string.Equals(Name, other.Name, StringComparison.Ordinal);
     }
 
     /// <inheritdoc />
     public override bool Equals(object? obj)
     {
-        if (obj is null) return false;
-        if (ReferenceEquals(this, obj)) return true;
+        if (obj is null)
+            return false;
+        if (ReferenceEquals(this, obj))
+            return true;
         return obj is MatCompressor other && Equals(other);
     }
 
@@ -370,7 +434,8 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     {
         return HashCode.Combine(
             StringComparer.Ordinal.GetHashCode(Provider),
-            StringComparer.Ordinal.GetHashCode(Name));
+            StringComparer.Ordinal.GetHashCode(Name)
+        );
     }
 
     #endregion
@@ -384,9 +449,11 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <returns>The compressor with the specified ID, or null if not found.</returns>
     public static MatCompressor? GetCompressorById(string id)
     {
-        if (string.IsNullOrWhiteSpace(id)) return null;
+        if (string.IsNullOrWhiteSpace(id))
+            return null;
         return AvailableCompressors.FirstOrDefault(compressor =>
-            compressor.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            compressor.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+        );
     }
 
     /// <summary>
@@ -396,9 +463,11 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// <returns>The compressor with the specified name, or null if not found.</returns>
     public static MatCompressor? GetCompressorByName(string name)
     {
-        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
         return AvailableCompressors.FirstOrDefault(compressor =>
-            compressor.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            compressor.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
+        );
     }
 
     /// <summary>

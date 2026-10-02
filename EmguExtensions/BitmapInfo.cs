@@ -9,8 +9,9 @@ namespace EmguExtensions;
 public readonly record struct BitmapInfo
 {
     /// <summary>
-    /// Gets the memory address.
+    /// Gets the memory address, or <see cref="IntPtr.Zero"/> when the source does not expose pixel memory.
     /// </summary>
+    /// <remarks>The address is only valid while the source (Mat or locked framebuffer) is alive and, for framebuffers, locked.</remarks>
     public nint Address { get; init; } = IntPtr.Zero;
 
     /// <summary>
@@ -25,8 +26,9 @@ public readonly record struct BitmapInfo
     public int BytesPerPixel { get; init; } = 1;
 
     /// <summary>
-    /// Gets the total number of bytes in a single row.
+    /// Gets the distance in bytes between the start of two consecutive rows (the stride).
     /// </summary>
+    /// <remarks>It equals <c>Width * BytesPerPixel</c> when <see cref="IsContiguous"/> is <see langword="true"/>, otherwise it also includes the per-row padding (or the rest of the parent image for ROIs).</remarks>
     public int RowBytes { get; init; }
 
     /// <summary>

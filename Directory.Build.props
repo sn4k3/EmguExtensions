@@ -1,74 +1,92 @@
 <Project>
-    <PropertyGroup>
-        <!-- Project -->
-        <TargetFramework>net10.0</TargetFramework>
-        <LangVersion>latest</LangVersion>
-        <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+  <PropertyGroup>
+    <!-- Project -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
 
-        <!-- Metadata -->
-        <MainProductName>EmguExtensions</MainProductName>
-        <ProductName>$(MainProductName)</ProductName>
-        <Company>PTRTECH</Company>
-        <CompanyRDNS>pt.ptrtech</CompanyRDNS>
-        <Authors>Tiago Conceição</Authors>
-        <Copyright>Copyright 2026-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
-        <Description>A high-performance .NET library that extends Emgu.CV (OpenCV wrapper) with zero-copy Span/Memory Mat accessors, async stream copy helpers, ROI utilities, pluggable Mat compression (PNG, Deflate, GZip, ZLib, Brotli, Zstd), CMat for memory-efficient compressed image storage, structured contour hierarchy wrappers, and drawing helpers for polygons and multi-line text rendering.</Description>
-        <Version>0.2.0</Version>
+    <!-- Metadata -->
+    <MainProductName>EmguExtensions</MainProductName>
+    <ProductName>$(MainProductName)</ProductName>
+    <Company>PTRTECH</Company>
+    <CompanyRDNS>pt.ptrtech</CompanyRDNS>
+    <Authors>Tiago Conceição</Authors>
+    <Copyright>Copyright 2026-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
+    <Description>A high-performance .NET library that extends Emgu.CV (OpenCV wrapper) with zero-copy Span/Memory Mat accessors, async stream copy helpers, ROI utilities, pluggable Mat compression (PNG, Deflate, GZip, ZLib, Brotli, Zstd), CMat for memory-efficient compressed image storage, structured contour hierarchy wrappers, and drawing helpers for polygons and multi-line text rendering.</Description>
+    <Version>0.2.1</Version>
 
-        <!-- Package -->
-        <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(MainProductName).ico</ApplicationIcon>
-        <PackageIcon>$(MainProductName)-128.png</PackageIcon>
-        <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-        <EnablePackageValidation>true</EnablePackageValidation>
-        <RepositoryType>Git</RepositoryType>
-        <PublishRepositoryUrl>true</PublishRepositoryUrl>
-        <RepositoryUrl>https://github.com/sn4k3/EmguExtensions</RepositoryUrl>
-        <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-        <PackageReleaseNotes>$(RepositoryUrl)/releases</PackageReleaseNotes>
-        <PackageTags>emgu;emgucv;opencv;image-processing;computer-vision;mat;compression;brotli;gzip;zlib;zstd;deflate;png;cmat;roi;contours;span;extensions;dotnet;csharp</PackageTags>
-        <EmbedUntrackedSources>true</EmbedUntrackedSources>
-        <IncludeSymbols>true</IncludeSymbols>
-        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- Package -->
+    <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(MainProductName).ico</ApplicationIcon>
+    <PackageIcon>$(MainProductName)-128.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <RepositoryType>Git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <RepositoryUrl>https://github.com/sn4k3/EmguExtensions</RepositoryUrl>
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+    <PackageReleaseNotes>$(RepositoryUrl)/releases</PackageReleaseNotes>
+    <PackageTags>emgu;emgucv;opencv;image-processing;computer-vision;mat;compression;brotli;gzip;zlib;zstd;deflate;png;cmat;roi;contours;span;extensions;dotnet;csharp</PackageTags>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-        <!-- Set the path map and artifacts path. -->
-        <PathMap>$(MSBuildProjectDirectory)=$(MSBuildProjectName)</PathMap>
-        <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
-        <CommonPublishDir>$(ArtifactsPath)\publish</CommonPublishDir>
+    <!-- Set the path map and artifacts path. -->
+    <PathMap>$(MSBuildProjectDirectory)=$(MSBuildProjectName)</PathMap>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+    <CommonPublishDir>$(ArtifactsPath)\publish</CommonPublishDir>
 
-        <!-- Enable Build Acceleration in Visual Studio. -->
-        <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+    <!-- Enable Build Acceleration in Visual Studio. -->
+    <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
 
-        <!-- Sign -->
-        <SignAssembly>True</SignAssembly>
-        <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)$(MainProductName).snk</AssemblyOriginatorKeyFile>
+    <!-- Sign -->
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)$(MainProductName).snk</AssemblyOriginatorKeyFile>
 
-        <!-- No pack under Debug -->
-        <IsPackable Condition="'$(Configuration)' == 'Debug'">false</IsPackable>
+    <!-- No pack under Debug -->
+    <IsPackable Condition="'$(Configuration)' == 'Debug'">false</IsPackable>
 
-        <!-- ContinuousIntegrationBuild -->
-        <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
-        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    </PropertyGroup>
+    <!-- ContinuousIntegrationBuild -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'"
+      >true</ContinuousIntegrationBuild>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
 
-    <ItemGroup>
-        <None Include="$(MSBuildThisFileDirectory)media\$(MainProductName)-128.png" Pack="true" PackagePath="" Visible="false"/>
-    </ItemGroup>
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)media\$(MainProductName)-128.png"
+      Pack="true"
+      PackagePath=""
+      Visible="false"
+    />
+  </ItemGroup>
 
-    <Choose>
-        <When Condition="Exists('$(MSBuildProjectDirectory)\README.md')">
-            <ItemGroup>
-                <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="" Visible="true"/>
-            </ItemGroup>
-        </When>
-        <When Condition="Exists('$(MSBuildThisFileDirectory)README.md')">
-            <ItemGroup>
-                <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" Visible="true"/>
-            </ItemGroup>
-        </When>
-    </Choose>
+  <Choose>
+    <When Condition="Exists('$(MSBuildProjectDirectory)\README.md')">
+      <ItemGroup>
+        <None
+          Include="$(MSBuildProjectDirectory)\README.md"
+          Pack="true"
+          PackagePath=""
+          Visible="true"
+        />
+      </ItemGroup>
+    </When>
+    <When Condition="Exists('$(MSBuildThisFileDirectory)README.md')">
+      <ItemGroup>
+        <None
+          Include="$(MSBuildThisFileDirectory)README.md"
+          Pack="true"
+          PackagePath=""
+          Visible="true"
+        />
+      </ItemGroup>
+    </When>
+  </Choose>
+
+  <Import Project="$(MSBuildThisFileDirectory)/SyncArtifacts.props" />
 </Project>

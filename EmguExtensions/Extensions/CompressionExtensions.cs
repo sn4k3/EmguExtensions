@@ -36,6 +36,11 @@ public static class CompressionExtensions
     /// </summary>
     /// <param name="level">The integer compression level (0-3).</param>
     /// <returns>The corresponding <see cref="CompressionLevel"/> enum value.</returns>
+    /// <remarks>
+    /// This is an ascending scale (0 = <see cref="CompressionLevel.NoCompression"/>, 1 = <see cref="CompressionLevel.Fastest"/>,
+    /// 2 = <see cref="CompressionLevel.Optimal"/>, 3+ = <see cref="CompressionLevel.SmallestSize"/>), it is NOT the numeric value of the
+    /// <see cref="CompressionLevel"/> enum (where 0 is <see cref="CompressionLevel.Optimal"/> and 2 is <see cref="CompressionLevel.NoCompression"/>).
+    /// </remarks>
     public static CompressionLevel GetCompressionLevel(int level)
     {
         return level switch

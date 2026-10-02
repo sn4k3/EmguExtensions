@@ -58,13 +58,13 @@ public static class DrawingExtensions
         public Color FactorColor(double factor, byte min = 0, byte max = byte.MaxValue)
         {
             byte r = (byte)(color.R == 0 ? 0 :
-                Math.Clamp(color.R * factor, min, max));
+                Math.Clamp(Math.Round(color.R * factor, MidpointRounding.AwayFromZero), min, max));
 
             byte g = (byte)(color.G == 0 ? 0 :
-                Math.Clamp(color.G * factor, min, max));
+                Math.Clamp(Math.Round(color.G * factor, MidpointRounding.AwayFromZero), min, max));
 
             byte b = (byte)(color.B == 0 ? 0 :
-                Math.Clamp(color.B * factor, min, max));
+                Math.Clamp(Math.Round(color.B * factor, MidpointRounding.AwayFromZero), min, max));
             return Color.FromArgb(color.A, r, g, b);
         }
     }
