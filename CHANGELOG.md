@@ -1,4 +1,4 @@
-# v0.3.0 (08/10/2026)
+# v0.3.0 (10/10/2026)
 
 - Upgrade Emgu.CV and native test runtimes to `5.0.0.6584` / OpenCV 5.
 - Migrate affine and rotated-text transforms from the removed `Matrix<T>` type to `Mat` storage with span access
