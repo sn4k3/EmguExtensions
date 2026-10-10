@@ -1,3 +1,30 @@
+# v0.3.0 (08/10/2026)
+
+- Upgrade Emgu.CV and native test runtimes to `5.0.0.6584` / OpenCV 5.
+- Migrate affine and rotated-text transforms from the removed `Matrix<T>` type to `Mat` storage with span access
+- Update legacy text APIs/tests to `HersheyFonts`.
+- Extend `DepthType.ByteCount` for half, bfloat16, bool, uint32, uint64, and int64 storage.
+- Add caller-owned `FontFace` text overloads for Unicode and custom fonts: `PutTextExtended`,
+  `GetTextSizeExtended`, and `PutTextRotated`, with pixel font sizes, optional weights, wrapping,
+  and whole-block alignment. Add `PutTextInRectangle` to fit and clip text within an image region.
+- Add perspective helpers:
+  - `CreatePerspectiveCrop` validates ordered convex corners, infers dimensions when requested, and preserves
+    image depth/channels with configurable sampling and borders.
+  - `OrderPerspectiveCorners` gives unordered corners a deterministic clockwise order.
+  - `PerspectiveCrop` supports reusable destinations and safely handles overlapping source/destination buffers.
+  - `GetPerspectiveCropSize`, `CreatePerspectiveTransform`, and `MapPerspectivePoints` support forward/inverse
+    coordinate mapping, rejecting non-finite coordinates and points at infinity.
+  - Add a `RotatedRect` crop overload, usable with `EmguContour.BoundsBestFit`.
+  - `FindQuadrilaterals` returns ordered convex contour approximations, filtered by area and sorted largest first.
+- Add boolean-mask creation and conversion helpers, plus logical `MaskAnd`, `MaskOr`, `MaskXor`, and `MaskNot`.
+  Support `CvBool` and `Cv8U` input masks, including ROI views; boolean output uses canonical `0`/`1` values,
+  and `ToByteMask` uses `0`/`255`.
+- Optimize mask conversion and logical negation with native thresholding, use native bitwise operations for
+  combinations, and fill constant boolean masks natively while preserving canonical values and ROI strides.
+- Keep the Windows native test packages' NU1701 metadata warnings visible without failing the test build.
+- Document resource ownership, geometry conventions, text behavior, mask formats, and OpenCV 5 migration
+  considerations; add native regression tests for text, perspective geometry, buffer reuse, and masks.
+
 # v0.2.1 (02/10/2026)
 
 - `MatCompressor` & Subclasses:

@@ -113,7 +113,7 @@ public static partial class EmguCvExtensions
     /// <returns></returns>
     public static Size GetTextSizeExtended(
         string text,
-        FontFace fontFace,
+        HersheyFonts fontFace,
         double fontScale,
         int thickness,
         ref int baseLine,
@@ -144,7 +144,7 @@ public static partial class EmguCvExtensions
     /// <returns>The size of the text.</returns>
     public static Size GetTextSizeExtended(
         string text,
-        FontFace fontFace,
+        HersheyFonts fontFace,
         double fontScale,
         int thickness,
         int lineGapOffset,
@@ -164,6 +164,7 @@ public static partial class EmguCvExtensions
                 break;
             }
         }
+
         var textSize = CvInvoke.GetTextSize(
             firstNonEmpty,
             fontFace,
@@ -354,13 +355,22 @@ public static partial class EmguCvExtensions
     private readonly struct ThresholdGreyMapper(byte thresholdGrey, bool useThreshold) : IGreyMapper
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public byte Map(byte value) =>
-            useThreshold ? (value <= thresholdGrey ? byte.MinValue : byte.MaxValue) : value;
+        public byte Map(byte value)
+        {
+            return useThreshold
+                ? value <= thresholdGrey
+                    ? byte.MinValue
+                    : byte.MaxValue
+                : value;
+        }
     }
 
     private readonly struct FuncGreyMapper(Func<byte, byte> greyFunc) : IGreyMapper
     {
-        public byte Map(byte value) => greyFunc(value);
+        public byte Map(byte value)
+        {
+            return greyFunc(value);
+        }
     }
 
     /// <summary>

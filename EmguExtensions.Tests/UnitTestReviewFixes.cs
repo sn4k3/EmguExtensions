@@ -542,7 +542,7 @@ public class UnitTestReviewFixes
         horizontal.PutTextRotated(
             "Hello",
             org,
-            FontFace.HersheySimplex,
+            HersheyFonts.Simplex,
             1.5,
             new MCvScalar(255),
             2,
@@ -551,7 +551,7 @@ public class UnitTestReviewFixes
         vertical.PutTextRotated(
             "Hello",
             org,
-            FontFace.HersheySimplex,
+            HersheyFonts.Simplex,
             1.5,
             new MCvScalar(255),
             2,
@@ -580,7 +580,7 @@ public class UnitTestReviewFixes
         mat.PutTextRotated(
             "Rotated text",
             new Point(200, 200),
-            FontFace.HersheySimplex,
+            HersheyFonts.Simplex,
             1,
             new MCvScalar(255),
             2,
@@ -600,13 +600,13 @@ public class UnitTestReviewFixes
         using var mat = new Mat(new Size(100, 100), DepthType.Cv8U, 1);
         mat.SetTo(new MCvScalar(0));
 
-        mat.PutTextRotated("Clipped text", new Point(-20, 50), FontFace.HersheySimplex, 1, new MCvScalar(255), 2,
+        mat.PutTextRotated("Clipped text", new Point(-20, 50), HersheyFonts.Simplex, 1, new MCvScalar(255), 2,
             lineGapOffset: 0, angle: 20);
         Assert.True(mat.CountNonZero > 0);
 
         using var untouched = new Mat(new Size(100, 100), DepthType.Cv8U, 1);
         untouched.SetTo(new MCvScalar(0));
-        untouched.PutTextRotated("Far away", new Point(5000, 5000), FontFace.HersheySimplex, 1, new MCvScalar(255), 2,
+        untouched.PutTextRotated("Far away", new Point(5000, 5000), HersheyFonts.Simplex, 1, new MCvScalar(255), 2,
             lineGapOffset: 0, angle: 20);
         Assert.Equal(0, untouched.CountNonZero);
     }

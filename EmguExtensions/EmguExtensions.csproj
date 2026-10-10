@@ -1,18 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
 
-    <PropertyGroup>
-        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="All" />
-        <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2"/>
-        <PackageReference Include="StageKit.Primitives" Version="0.4.1" />
-        <PackageReference Include="System.IO.Hashing" Version="10.0.12" />
-        <PackageReference Include="DotNext" Version="6.8.0" />
-        <PackageReference Include="DotNext.IO" Version="6.8.0" />
-        <PackageReference Include="Emgu.CV" Version="4.13.0.5924"/>
-    </ItemGroup>
-
+  <ItemGroup>
+    <PackageReference
+      Include="Microsoft.SourceLink.GitHub"
+      Version="10.0.401"
+      PrivateAssets="All"
+    />
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
+    <PackageReference Include="StageKit.Primitives" Version="0.4.1" />
+    <PackageReference Include="System.IO.Hashing" Version="10.0.12" />
+    <PackageReference Include="DotNext" Version="6.9.0" />
+    <PackageReference Include="DotNext.IO" Version="6.9.0" />
+    <PackageReference Include="Emgu.CV" Version="5.0.0.6584" />
+  </ItemGroup>
 </Project>

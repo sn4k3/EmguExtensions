@@ -2,6 +2,9 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Emgu 5 Windows native-only packages use framework-neutral dependency groups.
+             Keep their NuGet compatibility warnings visible without failing the test build. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1701</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,13 +20,13 @@
     </PackageReference>
 
     <!-- Headless platform, to test the WriteableBitmap conversions without a window -->
-    <PackageReference Include="Avalonia.Headless" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.4" />
     <!-- Skia backs the bitmaps, the headless drawing stub does not keep the pixels between locks -->
-    <PackageReference Include="Avalonia.Skia" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.4" />
 
-    <PackageReference Include="Emgu.CV.runtime.mini.macos" Version="4.13.0.5924" />
-    <PackageReference Include="Emgu.CV.runtime.mini.ubuntu-x64" Version="4.12.0.5764" />
-    <PackageReference Include="Emgu.CV.runtime.mini.windows" Version="4.13.0.5924" />
+    <PackageReference Include="Emgu.CV.runtime.mini.macos" Version="5.0.0.6584" />
+    <PackageReference Include="Emgu.CV.runtime.mini.ubuntu-26.04-x64" Version="5.0.0.6584" />
+    <PackageReference Include="Emgu.CV.runtime.mini.windows" Version="5.0.0.6584" />
   </ItemGroup>
 
   <ItemGroup>

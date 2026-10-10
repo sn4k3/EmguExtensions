@@ -53,6 +53,12 @@ public class UnitTestEmguExtensions
     [InlineData(DepthType.Cv32S, 4)]
     [InlineData(DepthType.Cv32F, 4)]
     [InlineData(DepthType.Cv64F, 8)]
+    [InlineData(DepthType.Cv16F, 2)]
+    [InlineData(DepthType.Cv16BF, 2)]
+    [InlineData(DepthType.CvBool, 1)]
+    [InlineData(DepthType.Cv32U, 4)]
+    [InlineData(DepthType.Cv64U, 8)]
+    [InlineData(DepthType.Cv64S, 8)]
     public void ByteCount_KnownDepthType_ReturnsCorrectByteCount(DepthType depth, byte expected)
     {
         Assert.Equal(expected, depth.ByteCount);
@@ -1113,6 +1119,19 @@ public class UnitTestEmguExtensions
     #endregion
 
     #region Transform methods
+
+    [Fact]
+    public void Transform_Translation_PreservesPixelsWithoutShearing()
+    {
+        using var mat = CreateSolidMat(8, 6);
+        mat.GetSpan2D<byte>()[2, 1] = 255;
+
+        mat.Transform(1, 1, 2, 1, interpolation: Inter.Nearest);
+
+        Assert.Equal(new Size(8, 6), mat.Size);
+        Assert.Equal(255, mat.GetReadOnlySpan2D<byte>()[3, 3]);
+        Assert.Equal(1, mat.CountNonZero);
+    }
 
     [Fact]
     public void Rotate_OutputIdentity_CopiesSourceToDestination()

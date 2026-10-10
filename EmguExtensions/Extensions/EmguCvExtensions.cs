@@ -49,11 +49,15 @@ public static partial class EmguCvExtensions
         public byte ByteCount =>
             src switch
             {
-                DepthType.Default or DepthType.Cv8U or DepthType.Cv8S => 1,
-                DepthType.Cv16U or DepthType.Cv16S => 2,
-                DepthType.Cv32S or DepthType.Cv32F => 4,
-                DepthType.Cv64F => 8,
-                _ => throw new ArgumentOutOfRangeException(nameof(src), src, $"Unsupported depth type: {src}.")
+                DepthType.Default or DepthType.Cv8U or DepthType.Cv8S or DepthType.CvBool => 1,
+                DepthType.Cv16U or DepthType.Cv16S or DepthType.Cv16F or DepthType.Cv16BF => 2,
+                DepthType.Cv32S or DepthType.Cv32U or DepthType.Cv32F => 4,
+                DepthType.Cv64F or DepthType.Cv64U or DepthType.Cv64S => 8,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(src),
+                    src,
+                    $"Unsupported depth type: {src}."
+                ),
             };
     }
 
@@ -89,8 +93,11 @@ public static partial class EmguCvExtensions
         /// <param name="method">Approximation method (for all the modes, except CV_RETR_RUNS, which uses built-in approximation). </param>
         /// <param name="offset">Offset, by which every contour point is shifted. This is useful if the contours are extracted from the image ROI and then they should be analyzed in the whole image context</param>
         /// <returns>The contour hierarchy</returns>
-        public VectorOfVectorOfPoint FindContours(RetrType mode = RetrType.List,
-            ChainApproxMethod method = ChainApproxMethod.ChainApproxSimple, Point offset = default)
+        public VectorOfVectorOfPoint FindContours(
+            RetrType mode = RetrType.List,
+            ChainApproxMethod method = ChainApproxMethod.ChainApproxSimple,
+            Point offset = default
+        )
         {
             using var hierarchy = new Mat();
             var contours = new VectorOfVectorOfPoint();
@@ -107,8 +114,12 @@ public static partial class EmguCvExtensions
         /// <param name="method">Approximation method (for all the modes, except CV_RETR_RUNS, which uses built-in approximation). </param>
         /// <param name="offset">Offset, by which every contour point is shifted. This is useful if the contours are extracted from the image ROI and then they should be analyzed in the whole image context</param>
         /// <returns>Detected contours. Each contour is stored as a vector of points.</returns>
-        public VectorOfVectorOfPoint FindContours(out int[,] hierarchy, RetrType mode,
-            ChainApproxMethod method = ChainApproxMethod.ChainApproxSimple, Point offset = default)
+        public VectorOfVectorOfPoint FindContours(
+            out int[,] hierarchy,
+            RetrType mode,
+            ChainApproxMethod method = ChainApproxMethod.ChainApproxSimple,
+            Point offset = default
+        )
         {
             var contours = new VectorOfVectorOfPoint();
             using var hierarchyMat = new Mat();
@@ -116,14 +127,20 @@ public static partial class EmguCvExtensions
             CvInvoke.FindContours(src, contours, hierarchyMat, mode, method, offset);
 
             hierarchy = new int[hierarchyMat.Cols, 4];
-            if (contours.Size == 0) return contours;
+            if (contours.Size == 0)
+                return contours;
             using var gcHandle = new GCSafeHandle(hierarchy);
-            using var mat2 = new Mat(hierarchyMat.Rows, hierarchyMat.Cols, hierarchyMat.Depth, 4,
-                gcHandle.DangerousGetHandle(), hierarchyMat.Step);
+            using var mat2 = new Mat(
+                hierarchyMat.Rows,
+                hierarchyMat.Cols,
+                hierarchyMat.Depth,
+                4,
+                gcHandle.DangerousGetHandle(),
+                hierarchyMat.Step
+            );
             hierarchyMat.CopyTo(mat2);
             return contours;
         }
-
 
         /// <summary>
         /// Encodes the source image as a PNG and returns the resulting byte array.
@@ -144,8 +161,14 @@ public static partial class EmguCvExtensions
         {
             ArgumentOutOfRangeException.ThrowIfNegative(pngCompressionLevel);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(pngCompressionLevel, 9);
-            return CvInvoke.Imencode(".png", src,
-                new KeyValuePair<ImwriteFlags, int>(ImwriteFlags.PngCompression, pngCompressionLevel));
+            return CvInvoke.Imencode(
+                ".png",
+                src,
+                new KeyValuePair<ImwriteFlags, int>(
+                    ImwriteFlags.PngCompression,
+                    pngCompressionLevel
+                )
+            );
         }
 
         /// <summary>
@@ -162,7 +185,11 @@ public static partial class EmguCvExtensions
                 CompressionLevel.Fastest => 1,
                 CompressionLevel.Optimal => 3,
                 CompressionLevel.SmallestSize => 9,
-                _ => throw new ArgumentOutOfRangeException(nameof(compressionLevel), compressionLevel, null)
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(compressionLevel),
+                    compressionLevel,
+                    null
+                ),
             };
             return src.GetPngBytes(pngCompressionLevel);
         }
@@ -183,7 +210,10 @@ public static partial class EmguCvExtensions
         /// <param name="pngCompressionLevel">The compression level to use for PNG encoding. Valid values range from 0 (no compression) to 9 (maximum compression).</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is a byte array containing the PNG-encoded image data.</returns>
-        public Task<byte[]> GetPngBytesAsync(int pngCompressionLevel, CancellationToken cancellationToken = default)
+        public Task<byte[]> GetPngBytesAsync(
+            int pngCompressionLevel,
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.Run(() => src.GetPngBytes(pngCompressionLevel), cancellationToken);
         }
@@ -194,8 +224,10 @@ public static partial class EmguCvExtensions
         /// <param name="compressionLevel">The compression level to use for PNG encoding.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is a byte array containing the PNG-encoded image data.</returns>
-        public Task<byte[]> GetPngBytesAsync(CompressionLevel compressionLevel,
-            CancellationToken cancellationToken = default)
+        public Task<byte[]> GetPngBytesAsync(
+            CompressionLevel compressionLevel,
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.Run(() => src.GetPngBytes(compressionLevel), cancellationToken);
         }
@@ -217,20 +249,47 @@ public static partial class EmguCvExtensions
         /// <param name="bottomLeftOrigin">If set to <see langword="true"/>, the origin is at the bottom-left corner. Otherwise, the origin is at the
         /// top-left.</param>
         /// <param name="lineAlignment">Specifies the alignment of multi-line text relative to the origin point.</param>
-        public void PutTextExtended(string text, Point org, FontFace fontFace, double fontScale,
-            MCvScalar color, int thickness = 1, LineType lineType = LineType.EightConnected,
-            bool bottomLeftOrigin = false, PutTextLineAlignment lineAlignment = default)
+        public void PutTextExtended(
+            string text,
+            Point org,
+            HersheyFonts fontFace,
+            double fontScale,
+            MCvScalar color,
+            int thickness = 1,
+            LineType lineType = LineType.EightConnected,
+            bool bottomLeftOrigin = false,
+            PutTextLineAlignment lineAlignment = default
+        )
         {
-            src.PutTextExtended(text, org, fontFace, fontScale, color, thickness, 0, lineType, bottomLeftOrigin,
-                lineAlignment);
+            src.PutTextExtended(
+                text,
+                org,
+                fontFace,
+                fontScale,
+                color,
+                thickness,
+                0,
+                lineType,
+                bottomLeftOrigin,
+                lineAlignment
+            );
         }
 
         /// <summary>
         /// Extended OpenCV PutText to accepting line breaks and line alignment
         /// </summary>
-        public void PutTextExtended(string text, Point org, FontFace fontFace, double fontScale,
-            MCvScalar color, int thickness = 1, int lineGapOffset = 0, LineType lineType = LineType.EightConnected,
-            bool bottomLeftOrigin = false, PutTextLineAlignment lineAlignment = default)
+        public void PutTextExtended(
+            string text,
+            Point org,
+            HersheyFonts fontFace,
+            double fontScale,
+            MCvScalar color,
+            int thickness = 1,
+            int lineGapOffset = 0,
+            LineType lineType = LineType.EightConnected,
+            bool bottomLeftOrigin = false,
+            PutTextLineAlignment lineAlignment = default
+        )
         {
             ArgumentNullException.ThrowIfNull(text);
             text = text.TrimEnd('\n', '\r', ' ');
@@ -239,7 +298,17 @@ public static partial class EmguCvExtensions
             switch (lines.Length)
             {
                 case 1:
-                    CvInvoke.PutText(src, text, org, fontFace, fontScale, color, thickness, lineType, bottomLeftOrigin);
+                    CvInvoke.PutText(
+                        src,
+                        text,
+                        org,
+                        fontFace,
+                        fontScale,
+                        color,
+                        thickness,
+                        lineType,
+                        bottomLeftOrigin
+                    );
                     return;
             }
 
@@ -254,9 +323,18 @@ public static partial class EmguCvExtensions
                     break;
                 }
             }
-            var textSize = CvInvoke.GetTextSize(firstNonEmptyLine, fontFace, fontScale, thickness, ref baseLine);
+
+            var textSize = CvInvoke.GetTextSize(
+                firstNonEmptyLine,
+                fontFace,
+                fontScale,
+                thickness,
+                ref baseLine
+            );
             var lineGap = textSize.Height / 3 + lineGapOffset;
-            var linesSize = (lineAlignment is not PutTextLineAlignment.Left and not PutTextLineAlignment.Default)
+            var linesSize = lineAlignment
+                is not PutTextLineAlignment.Left
+                    and not PutTextLineAlignment.Default
                 ? new Size[lines.Length]
                 : [];
             var width = 0;
@@ -272,31 +350,52 @@ public static partial class EmguCvExtensions
             {
                 for (var i = 0; i < lines.Length; i++)
                 {
-                    if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                    if (string.IsNullOrWhiteSpace(lines[i]))
+                        continue;
                     var baseLineRef = 0;
-                    linesSize[i] = CvInvoke.GetTextSize(lines[i], fontFace, fontScale, thickness, ref baseLineRef);
+                    linesSize[i] = CvInvoke.GetTextSize(
+                        lines[i],
+                        fontFace,
+                        fontScale,
+                        thickness,
+                        ref baseLineRef
+                    );
                     width = Math.Max(width, linesSize[i].Width);
                 }
             }
 
             for (var i = 0; i < lines.Length; i++)
             {
-                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                if (string.IsNullOrWhiteSpace(lines[i]))
+                    continue;
 
                 var x = lineAlignment switch
                 {
                     PutTextLineAlignment.Default or PutTextLineAlignment.Left => org.X,
                     PutTextLineAlignment.Center => org.X + (width - linesSize[i].Width) / 2,
                     PutTextLineAlignment.Right => org.X + width - linesSize[i].Width,
-                    _ => throw new ArgumentOutOfRangeException(nameof(lineAlignment), lineAlignment, null)
+                    _ => throw new ArgumentOutOfRangeException(
+                        nameof(lineAlignment),
+                        lineAlignment,
+                        null
+                    ),
                 };
 
                 // Find total size of text block before this line
                 var lineYAdjustment = i * (lineGap + textSize.Height);
                 // Move text down from original line based on line number
                 var lineY = !bottomLeftOrigin ? org.Y + lineYAdjustment : org.Y - lineYAdjustment;
-                CvInvoke.PutText(src, lines[i], new Point(x, lineY), fontFace, fontScale, color, thickness, lineType,
-                    bottomLeftOrigin);
+                CvInvoke.PutText(
+                    src,
+                    lines[i],
+                    new Point(x, lineY),
+                    fontFace,
+                    fontScale,
+                    color,
+                    thickness,
+                    lineType,
+                    bottomLeftOrigin
+                );
             }
         }
     }
@@ -427,8 +526,11 @@ public static partial class EmguCvExtensions
 
             var availableBytes = src.GetAccessibleByteCount();
             if ((long)offset + length > availableBytes)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset,
-                    $"The requested byte range exceeds the accessible matrix data ({availableBytes} bytes).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(offset),
+                    offset,
+                    $"The requested byte range exceeds the accessible matrix data ({availableBytes} bytes)."
+                );
         }
 
         /// <summary>
@@ -441,11 +543,17 @@ public static partial class EmguCvExtensions
         public void ValidatePixelCoordinates(int x, int y)
         {
             if ((uint)x >= (uint)src.Width)
-                throw new ArgumentOutOfRangeException(nameof(x), x,
-                    $"X must be in the range [0, {src.Width}).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(x),
+                    x,
+                    $"X must be in the range [0, {src.Width})."
+                );
             if ((uint)y >= (uint)src.Height)
-                throw new ArgumentOutOfRangeException(nameof(y), y,
-                    $"Y must be in the range [0, {src.Height}).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(y),
+                    y,
+                    $"Y must be in the range [0, {src.Height})."
+                );
         }
 
         /// <summary>
@@ -457,21 +565,44 @@ public static partial class EmguCvExtensions
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool ValidateRoi(Rectangle roi)
         {
-            if (roi.Width == 0 || roi.Height == 0) return false;
+            if (roi.Width == 0 || roi.Height == 0)
+                return false;
             if (roi.X < 0)
-                throw new ArgumentOutOfRangeException(nameof(roi), roi, "ROI X must be non-negative.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(roi),
+                    roi,
+                    "ROI X must be non-negative."
+                );
             if (roi.Y < 0)
-                throw new ArgumentOutOfRangeException(nameof(roi), roi, "ROI Y must be non-negative.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(roi),
+                    roi,
+                    "ROI Y must be non-negative."
+                );
             if (roi.Width < 0)
-                throw new ArgumentOutOfRangeException(nameof(roi), roi, "ROI width must be non-negative.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(roi),
+                    roi,
+                    "ROI width must be non-negative."
+                );
             if (roi.Height < 0)
-                throw new ArgumentOutOfRangeException(nameof(roi), roi, "ROI height must be non-negative.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(roi),
+                    roi,
+                    "ROI height must be non-negative."
+                );
             if (roi.X > src.Width || roi.Width > src.Width - roi.X)
-                throw new ArgumentOutOfRangeException(nameof(roi), roi,
-                    $"ROI exceeds matrix width ({src.Width}).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(roi),
+                    roi,
+                    $"ROI exceeds matrix width ({src.Width})."
+                );
             if (roi.Y > src.Height || roi.Height > src.Height - roi.Y)
-                throw new ArgumentOutOfRangeException(nameof(roi), roi,
-                    $"ROI exceeds matrix height ({src.Height}).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(roi),
+                    roi,
+                    $"ROI exceeds matrix height ({src.Height})."
+                );
 
             return true;
         }
@@ -491,20 +622,27 @@ public static partial class EmguCvExtensions
         public void CopyTo(IntPtr destination)
         {
             if (destination == IntPtr.Zero)
-                throw new ArgumentException("Destination pointer must not be null.", nameof(destination));
+                throw new ArgumentException(
+                    "Destination pointer must not be null.",
+                    nameof(destination)
+                );
             unsafe
             {
                 if (src.IsContinuous)
                 {
                     var totalBytes = src.ByteCountInt64;
-                    Buffer.MemoryCopy(src.DataPointer.ToPointer(), destination.ToPointer(), totalBytes, totalBytes);
+                    Buffer.MemoryCopy(
+                        src.DataPointer.ToPointer(),
+                        destination.ToPointer(),
+                        totalBytes,
+                        totalBytes
+                    );
                 }
                 else
                 {
                     var srcSpan = src.GetReadOnlySpan2DOfBytes();
                     var dstSpan = new Span<byte>(destination.ToPointer(), (int)srcSpan.Length);
                     srcSpan.CopyTo(dstSpan);
-
 
                     /*// Alternative:
                     // Row by row copy
@@ -550,14 +688,17 @@ public static partial class EmguCvExtensions
 
             if (src.IsContinuous)
             {
-                await stream.WriteAsync(src.GetReadOnlyMemoryOfBytes(), cancellationToken).ConfigureAwait(false);
+                await stream
+                    .WriteAsync(src.GetReadOnlyMemoryOfBytes(), cancellationToken)
+                    .ConfigureAwait(false);
             }
             else
             {
                 // Non-continuous Mat: write row by row
                 for (var row = 0; row < src.Height; row++)
                 {
-                    await stream.WriteAsync(src.GetReadOnlyRowMemoryOfBytes(row), cancellationToken)
+                    await stream
+                        .WriteAsync(src.GetReadOnlyRowMemoryOfBytes(row), cancellationToken)
                         .ConfigureAwait(false);
                 }
             }
@@ -587,7 +728,8 @@ public static partial class EmguCvExtensions
             var width = Math.Min(src.Width - srcX, destination.Width - dstX);
             var height = Math.Min(src.Height - srcY, destination.Height - dstY);
 
-            if (width <= 0 || height <= 0) return;
+            if (width <= 0 || height <= 0)
+                return;
 
             var srcRoi = new Rectangle(srcX, srcY, width, height);
             var dstRoi = new Rectangle(dstX, dstY, width, height);
@@ -625,9 +767,11 @@ public static partial class EmguCvExtensions
         /// <returns>A new <see cref="Mat"/> containing the specified region from the center of the source matrix.</returns>
         public Mat NewFromRoiToCenter(Size targetSize, Rectangle roi)
         {
-            if (targetSize == src.Size) return src.Clone();
+            if (targetSize == src.Size)
+                return src.Clone();
             var newMat = src.NewZeros(targetSize);
-            if (roi.IsEmpty) return newMat;
+            if (roi.IsEmpty)
+                return newMat;
             src.CopyRegionToCenter(roi, newMat);
             return newMat;
         }
@@ -664,7 +808,8 @@ public static partial class EmguCvExtensions
             var copyWidth = Math.Min(src.Width, dst.Width);
             var copyHeight = Math.Min(src.Height, dst.Height);
 
-            if (copyWidth <= 0 || copyHeight <= 0) return;
+            if (copyWidth <= 0 || copyHeight <= 0)
+                return;
 
             using var srcRoi = src.Roi(new Rectangle(srcX, srcY, copyWidth, copyHeight));
             using var dstRoi = dst.Roi(new Rectangle(dstX, dstY, copyWidth, copyHeight));
@@ -683,7 +828,9 @@ public static partial class EmguCvExtensions
             get
             {
                 if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
-                    throw new InvalidOperationException("Cannot access BytePointer of an empty or uninitialized Mat.");
+                    throw new InvalidOperationException(
+                        "Cannot access BytePointer of an empty or uninitialized Mat."
+                    );
                 return (byte*)src.DataPointer.ToPointer();
             }
         }
@@ -697,7 +844,8 @@ public static partial class EmguCvExtensions
         {
             if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
                 throw new InvalidOperationException(
-                    "Cannot create an UnmanagedMemoryStream from an empty or uninitialized Mat.");
+                    "Cannot create an UnmanagedMemoryStream from an empty or uninitialized Mat."
+                );
 
             if (!src.IsContinuous)
                 throw new NotSupportedException("UnmanagedMemoryStream requires a continuous Mat.");
@@ -726,18 +874,21 @@ public static partial class EmguCvExtensions
         /// <returns>A span representing the matrix data.</returns>
         /// <exception cref="NotSupportedException">Thrown if the matrix is not continuous.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
-        public Span<T> GetSpan<T>(int length, int offset) where T : struct
+        public Span<T> GetSpan<T>(int length, int offset)
+            where T : struct
         {
             if (!src.IsContinuous)
                 throw new NotSupportedException(
-                    "To create a Span, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Span2D instead.");
+                    "To create a Span, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Span2D instead."
+                );
 
             length = ResolveElementRange(
                 src.ByteCountInt32,
                 Unsafe.SizeOf<T>(),
                 length,
                 offset,
-                out var byteOffset);
+                out var byteOffset
+            );
 
             unsafe
             {
@@ -781,22 +932,28 @@ public static partial class EmguCvExtensions
         /// <returns>A span representing the matrix data.</returns>
         /// <exception cref="NotSupportedException">Thrown if the matrix is not continuous.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
-        public ReadOnlySpan<T> GetReadOnlySpan<T>(int length = 0, int offset = 0) where T : struct
+        public ReadOnlySpan<T> GetReadOnlySpan<T>(int length = 0, int offset = 0)
+            where T : struct
         {
             if (!src.IsContinuous)
                 throw new NotSupportedException(
-                    "To create a Span, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Span2D instead.");
+                    "To create a Span, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Span2D instead."
+                );
 
             length = ResolveElementRange(
                 src.ByteCountInt32,
                 Unsafe.SizeOf<T>(),
                 length,
                 offset,
-                out var byteOffset);
+                out var byteOffset
+            );
 
             unsafe
             {
-                return new ReadOnlySpan<T>(IntPtr.Add(src.DataPointer, byteOffset).ToPointer(), length);
+                return new ReadOnlySpan<T>(
+                    IntPtr.Add(src.DataPointer, byteOffset).ToPointer(),
+                    length
+                );
             }
         }
 
@@ -831,14 +988,21 @@ public static partial class EmguCvExtensions
         /// </summary>
         /// <typeparam name="T">The type of data stored in the matrix (e.g., byte, float).</typeparam>
         /// <returns>A 2D span representing the matrix data.</returns>
-        public Span2D<T> GetSpan2D<T>() where T : struct
+        public Span2D<T> GetSpan2D<T>()
+            where T : struct
         {
             var sizeOfT = Unsafe.SizeOf<T>();
             var step = src.RealStep / sizeOfT;
             unsafe
             {
-                if (src.IsContinuous) return new Span2D<T>(src.DataPointer.ToPointer(), src.Height, step, 0);
-                return new Span2D<T>(src.DataPointer.ToPointer(), src.Height, step, src.Step / sizeOfT - step);
+                if (src.IsContinuous)
+                    return new Span2D<T>(src.DataPointer.ToPointer(), src.Height, step, 0);
+                return new Span2D<T>(
+                    src.DataPointer.ToPointer(),
+                    src.Height,
+                    step,
+                    src.Step / sizeOfT - step
+                );
             }
         }
 
@@ -868,15 +1032,22 @@ public static partial class EmguCvExtensions
         /// </summary>
         /// <typeparam name="T">The type of data stored in the matrix (e.g., byte, float).</typeparam>
         /// <returns>A 2D span representing the matrix data.</returns>
-        public ReadOnlySpan2D<T> GetReadOnlySpan2D<T>() where T : struct
+        public ReadOnlySpan2D<T> GetReadOnlySpan2D<T>()
+            where T : struct
         {
             var sizeOfT = Unsafe.SizeOf<T>();
             var step = src.RealStep / sizeOfT;
 
             unsafe
             {
-                if (src.IsContinuous) return new ReadOnlySpan2D<T>(src.DataPointer.ToPointer(), src.Height, step, 0);
-                return new ReadOnlySpan2D<T>(src.DataPointer.ToPointer(), src.Height, step, src.Step / sizeOfT - step);
+                if (src.IsContinuous)
+                    return new ReadOnlySpan2D<T>(src.DataPointer.ToPointer(), src.Height, step, 0);
+                return new ReadOnlySpan2D<T>(
+                    src.DataPointer.ToPointer(),
+                    src.Height,
+                    step,
+                    src.Step / sizeOfT - step
+                );
             }
         }
 
@@ -906,9 +1077,11 @@ public static partial class EmguCvExtensions
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the ROI extends beyond the matrix boundaries.
         /// </exception>
-        public Span2D<T> GetSpan2D<T>(Rectangle roi) where T : struct
+        public Span2D<T> GetSpan2D<T>(Rectangle roi)
+            where T : struct
         {
-            if (!ValidateRoi(src, roi)) return Span2D<T>.Empty;
+            if (!ValidateRoi(src, roi))
+                return Span2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
@@ -916,7 +1089,9 @@ public static partial class EmguCvExtensions
 
             unsafe
             {
-                var ptr = IntPtr.Add(src.DataPointer, roi.Y * src.Step + src.GetByteCount(roi.X)).ToPointer();
+                var ptr = IntPtr
+                    .Add(src.DataPointer, roi.Y * src.Step + src.GetByteCount(roi.X))
+                    .ToPointer();
                 return new Span2D<T>(ptr, roi.Height, roiWidth, pitch);
             }
         }
@@ -949,9 +1124,11 @@ public static partial class EmguCvExtensions
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the ROI extends beyond the matrix boundaries.
         /// </exception>
-        public ReadOnlySpan2D<T> GetReadOnlySpan2D<T>(Rectangle roi) where T : struct
+        public ReadOnlySpan2D<T> GetReadOnlySpan2D<T>(Rectangle roi)
+            where T : struct
         {
-            if (!ValidateRoi(src, roi)) return ReadOnlySpan2D<T>.Empty;
+            if (!ValidateRoi(src, roi))
+                return ReadOnlySpan2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
@@ -959,7 +1136,9 @@ public static partial class EmguCvExtensions
 
             unsafe
             {
-                var ptr = IntPtr.Add(src.DataPointer, roi.Y * src.Step + src.GetByteCount(roi.X)).ToPointer();
+                var ptr = IntPtr
+                    .Add(src.DataPointer, roi.Y * src.Step + src.GetByteCount(roi.X))
+                    .ToPointer();
                 return new ReadOnlySpan2D<T>(ptr, roi.Height, roiWidth, pitch);
             }
         }
@@ -989,24 +1168,32 @@ public static partial class EmguCvExtensions
         /// <param name="offset">The offset within the row.</param>
         /// <returns>A span representing the specified row of the matrix.</returns>
         /// <exception cref="ArgumentOutOfRangeException"></exception>
-        public Span<T> GetRowSpan<T>(int y, int length = 0, int offset = 0) where T : struct
+        public Span<T> GetRowSpan<T>(int y, int length = 0, int offset = 0)
+            where T : struct
         {
             ArgumentOutOfRangeException.ThrowIfNegative(y);
 
             if (y >= src.Height)
-                throw new ArgumentOutOfRangeException(nameof(y), y,
-                    $"Row index must be less than the matrix height ({src.Height}).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(y),
+                    y,
+                    $"Row index must be less than the matrix height ({src.Height})."
+                );
 
             length = ResolveElementRange(
                 src.RealStep,
                 Unsafe.SizeOf<T>(),
                 length,
                 offset,
-                out var byteOffset);
+                out var byteOffset
+            );
 
             unsafe
             {
-                return new Span<T>(IntPtr.Add(src.DataPointer, y * src.Step + byteOffset).ToPointer(), length);
+                return new Span<T>(
+                    IntPtr.Add(src.DataPointer, y * src.Step + byteOffset).ToPointer(),
+                    length
+                );
             }
         }
 
@@ -1031,7 +1218,8 @@ public static partial class EmguCvExtensions
         /// <param name="length">The number of elements in the row span.</param>
         /// <param name="offset">The offset within the row.</param>
         /// <returns>A read-only span representing the specified row of the matrix.</returns>
-        public ReadOnlySpan<T> GetReadOnlyRowSpan<T>(int y, int length = 0, int offset = 0) where T : struct
+        public ReadOnlySpan<T> GetReadOnlyRowSpan<T>(int y, int length = 0, int offset = 0)
+            where T : struct
         {
             return src.GetRowSpan<T>(y, length, offset);
         }
@@ -1071,20 +1259,26 @@ public static partial class EmguCvExtensions
         /// <returns>A memory representing the matrix data.</returns>
         /// <exception cref="NotSupportedException">Thrown if the matrix is not continuous.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
-        public Memory<T> GetMemory<T>(int length = 0, int offset = 0) where T : unmanaged
+        public Memory<T> GetMemory<T>(int length = 0, int offset = 0)
+            where T : unmanaged
         {
             if (!src.IsContinuous)
                 throw new NotSupportedException(
-                    "To create a Memory, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Memory2D instead.");
+                    "To create a Memory, the Mat's memory must be continuous. This Mat does not use continuous memory. Use Memory2D instead."
+                );
 
             length = ResolveElementRange(
                 src.ByteCountInt32,
                 Unsafe.SizeOf<T>(),
                 length,
                 offset,
-                out var byteOffset);
+                out var byteOffset
+            );
 
-            return new UnmanagedMemoryManager<T>(IntPtr.Add(src.DataPointer, byteOffset), length).Memory;
+            return new UnmanagedMemoryManager<T>(
+                IntPtr.Add(src.DataPointer, byteOffset),
+                length
+            ).Memory;
         }
 
         /// <summary>
@@ -1123,7 +1317,8 @@ public static partial class EmguCvExtensions
         /// <returns>A read-only memory representing the matrix data.</returns>
         /// <exception cref="NotSupportedException">Thrown if the matrix is not continuous.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the offset or length is out of range.</exception>
-        public ReadOnlyMemory<T> GetReadOnlyMemory<T>(int length = 0, int offset = 0) where T : unmanaged
+        public ReadOnlyMemory<T> GetReadOnlyMemory<T>(int length = 0, int offset = 0)
+            where T : unmanaged
         {
             return src.GetMemory<T>(length, offset);
         }
@@ -1160,12 +1355,15 @@ public static partial class EmguCvExtensions
         /// </summary>
         /// <typeparam name="T">The type of data stored in the matrix (e.g., byte, float).</typeparam>
         /// <returns>A 2D memory representing the matrix data.</returns>
-        public Memory2D<T> GetMemory2D<T>() where T : unmanaged
+        public Memory2D<T> GetMemory2D<T>()
+            where T : unmanaged
         {
-            if (src.IsEmpty || src.Height <= 0) return Memory2D<T>.Empty;
+            if (src.IsEmpty || src.Height <= 0)
+                return Memory2D<T>.Empty;
             var sizeOfT = Unsafe.SizeOf<T>();
             var width = src.RealStep / sizeOfT;
-            if (width <= 0) return Memory2D<T>.Empty;
+            if (width <= 0)
+                return Memory2D<T>.Empty;
             var rowStep = src.Step / sizeOfT;
             var pitch = rowStep - width;
             var managerLength = (src.Height - 1) * rowStep + width;
@@ -1200,12 +1398,15 @@ public static partial class EmguCvExtensions
         /// </summary>
         /// <typeparam name="T">The type of data stored in the matrix (e.g., byte, float).</typeparam>
         /// <returns>A 2D read-only memory representing the matrix data.</returns>
-        public ReadOnlyMemory2D<T> GetReadOnlyMemory2D<T>() where T : unmanaged
+        public ReadOnlyMemory2D<T> GetReadOnlyMemory2D<T>()
+            where T : unmanaged
         {
-            if (src.IsEmpty || src.Height <= 0) return ReadOnlyMemory2D<T>.Empty;
+            if (src.IsEmpty || src.Height <= 0)
+                return ReadOnlyMemory2D<T>.Empty;
             var sizeOfT = Unsafe.SizeOf<T>();
             var width = src.RealStep / sizeOfT;
-            if (width <= 0) return ReadOnlyMemory2D<T>.Empty;
+            if (width <= 0)
+                return ReadOnlyMemory2D<T>.Empty;
             var rowStep = src.Step / sizeOfT;
             var pitch = rowStep - width;
             var managerLength = (src.Height - 1) * rowStep + width;
@@ -1240,13 +1441,16 @@ public static partial class EmguCvExtensions
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the ROI extends beyond the matrix boundaries.
         /// </exception>
-        public Memory2D<T> GetMemory2D<T>(Rectangle roi) where T : unmanaged
+        public Memory2D<T> GetMemory2D<T>(Rectangle roi)
+            where T : unmanaged
         {
-            if (!ValidateRoi(src, roi)) return Memory2D<T>.Empty;
+            if (!ValidateRoi(src, roi))
+                return Memory2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
-            if (roiWidth <= 0) return Memory2D<T>.Empty;
+            if (roiWidth <= 0)
+                return Memory2D<T>.Empty;
             var rowStep = src.Step / sizeOfT;
             var pitch = rowStep - roiWidth;
             var managerLength = (roi.Height - 1) * rowStep + roiWidth;
@@ -1285,13 +1489,16 @@ public static partial class EmguCvExtensions
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the ROI extends beyond the matrix boundaries.
         /// </exception>
-        public ReadOnlyMemory2D<T> GetReadOnlyMemory2D<T>(Rectangle roi) where T : unmanaged
+        public ReadOnlyMemory2D<T> GetReadOnlyMemory2D<T>(Rectangle roi)
+            where T : unmanaged
         {
-            if (!ValidateRoi(src, roi)) return ReadOnlyMemory2D<T>.Empty;
+            if (!ValidateRoi(src, roi))
+                return ReadOnlyMemory2D<T>.Empty;
 
             var sizeOfT = Unsafe.SizeOf<T>();
             var roiWidth = src.GetByteCount(roi.Width) / sizeOfT;
-            if (roiWidth <= 0) return ReadOnlyMemory2D<T>.Empty;
+            if (roiWidth <= 0)
+                return ReadOnlyMemory2D<T>.Empty;
             var rowStep = src.Step / sizeOfT;
             var pitch = rowStep - roiWidth;
             var managerLength = (roi.Height - 1) * rowStep + roiWidth;
@@ -1330,22 +1537,30 @@ public static partial class EmguCvExtensions
         /// <param name="offset">The offset within the row.</param>
         /// <returns>A memory representing the specified row of the matrix.</returns>
         /// <exception cref="ArgumentOutOfRangeException"></exception>
-        public Memory<T> GetRowMemory<T>(int y, int length = 0, int offset = 0) where T : unmanaged
+        public Memory<T> GetRowMemory<T>(int y, int length = 0, int offset = 0)
+            where T : unmanaged
         {
             ArgumentOutOfRangeException.ThrowIfNegative(y);
 
             if (y >= src.Height)
-                throw new ArgumentOutOfRangeException(nameof(y), y,
-                    $"Row index must be less than the matrix height ({src.Height}).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(y),
+                    y,
+                    $"Row index must be less than the matrix height ({src.Height})."
+                );
 
             length = ResolveElementRange(
                 src.RealStep,
                 Unsafe.SizeOf<T>(),
                 length,
                 offset,
-                out var byteOffset);
+                out var byteOffset
+            );
 
-            return new UnmanagedMemoryManager<T>(IntPtr.Add(src.DataPointer, y * src.Step + byteOffset), length).Memory;
+            return new UnmanagedMemoryManager<T>(
+                IntPtr.Add(src.DataPointer, y * src.Step + byteOffset),
+                length
+            ).Memory;
         }
 
         /// <summary>
@@ -1372,7 +1587,8 @@ public static partial class EmguCvExtensions
         /// <param name="length">The number of elements in the row memory.</param>
         /// <param name="offset">The offset within the row.</param>
         /// <returns>A read-only memory representing the specified row of the matrix.</returns>
-        public ReadOnlyMemory<T> GetReadOnlyRowMemory<T>(int y, int length = 0, int offset = 0) where T : unmanaged
+        public ReadOnlyMemory<T> GetReadOnlyRowMemory<T>(int y, int length = 0, int offset = 0)
+            where T : unmanaged
         {
             return src.GetRowMemory<T>(y, length, offset);
         }
@@ -1385,7 +1601,11 @@ public static partial class EmguCvExtensions
         /// <param name="length">The number of elements in the row memory.</param>
         /// <param name="offset">The offset within the row.</param>
         /// <returns>A read-only memory representing the specified row of the matrix.</returns>
-        public ReadOnlyMemory<byte> GetReadOnlyRowMemoryOfBytes(int y, int length = 0, int offset = 0)
+        public ReadOnlyMemory<byte> GetReadOnlyRowMemoryOfBytes(
+            int y,
+            int length = 0,
+            int offset = 0
+        )
         {
             return src.GetReadOnlyRowMemory<byte>(y, length, offset);
         }
@@ -1410,10 +1630,16 @@ public static partial class EmguCvExtensions
         /// <param name="value">The value to fill the span with.</param>
         /// <param name="valueMinThreshold">The minimum threshold value for filling. If the value is below this threshold, the fill operation is skipped.</param>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
-        public void FillSpan<T>(ref int startPosition, int length, T value, T valueMinThreshold = default)
+        public void FillSpan<T>(
+            ref int startPosition,
+            int length,
+            T value,
+            T valueMinThreshold = default
+        )
             where T : struct, IComparisonOperators<T, T, bool>
         {
-            if (length <= 0) return;
+            if (length <= 0)
+                return;
             if (value < valueMinThreshold) // Ignore threshold (mostly if blacks), spare cycles
             {
                 startPosition += length;
@@ -1444,7 +1670,8 @@ public static partial class EmguCvExtensions
         public void FillSpan<T>(int x, int y, int length, T value, T valueMinThreshold = default)
             where T : struct, IComparisonOperators<T, T, bool>
         {
-            if (length <= 0 || value < valueMinThreshold) return; // Ignore threshold (mostly if blacks), spare cycles
+            if (length <= 0 || value < valueMinThreshold)
+                return; // Ignore threshold (mostly if blacks), spare cycles
             src.GetSpan<T>(length, src.GetPixelPos(x, y) / Unsafe.SizeOf<T>()).Fill(value);
         }
 
@@ -1482,8 +1709,10 @@ public static partial class EmguCvExtensions
         /// <returns>True if the ROI was adjusted, otherwise false.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the ROI is empty and the behavior is set to throw an exception.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the emptyRoiBehavior value is not recognized.</exception>
-        public bool SanitizeRoiWithBehavior(ref Rectangle roi,
-            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
+        public bool SanitizeRoiWithBehavior(
+            ref Rectangle roi,
+            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default
+        )
         {
             // Rectangle.IsEmpty is only true when X, Y, Width and Height are all zero, a ROI without area is empty regardless of its location
             if (roi.Width <= 0 || roi.Height <= 0)
@@ -1501,7 +1730,11 @@ public static partial class EmguCvExtensions
                     case EmptyRoiBehavior.ThrowException:
                         throw new InvalidOperationException("The ROI is empty.");
                     default:
-                        throw new ArgumentOutOfRangeException(nameof(emptyRoiBehavior), emptyRoiBehavior, null);
+                        throw new ArgumentOutOfRangeException(
+                            nameof(emptyRoiBehavior),
+                            emptyRoiBehavior,
+                            null
+                        );
                 }
             }
 
@@ -1520,8 +1753,14 @@ public static partial class EmguCvExtensions
         /// <returns>True if the ROI was modified; otherwise, false.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the ROI is empty or padding is out of bounds and the behavior is set to throw an exception.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when an invalid value is provided for the emptyRoiBehavior parameter.</exception>
-        public bool ConstrainRoi(ref Rectangle roi, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default,
-            int padLeft = 0, int padTop = 0, int padRight = 0, int padBottom = 0)
+        public bool ConstrainRoi(
+            ref Rectangle roi,
+            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default,
+            int padLeft = 0,
+            int padTop = 0,
+            int padRight = 0,
+            int padBottom = 0
+        )
         {
             var x = Math.Max(0, roi.X - padLeft);
             var y = Math.Max(0, roi.Y - padTop);
@@ -1546,9 +1785,15 @@ public static partial class EmguCvExtensions
                         height = src.Height;
                         break;
                     case EmptyRoiBehavior.ThrowException:
-                        throw new InvalidOperationException("The ROI is empty or padding out of bounds.");
+                        throw new InvalidOperationException(
+                            "The ROI is empty or padding out of bounds."
+                        );
                     default:
-                        throw new ArgumentOutOfRangeException(nameof(emptyRoiBehavior), emptyRoiBehavior, null);
+                        throw new ArgumentOutOfRangeException(
+                            nameof(emptyRoiBehavior),
+                            emptyRoiBehavior,
+                            null
+                        );
                 }
             }
 
@@ -1574,11 +1819,20 @@ public static partial class EmguCvExtensions
         /// <returns>True if the ROI was modified; otherwise, false.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the ROI is empty or padding is out of bounds and the behavior is set to throw an exception.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when an invalid value is provided for the emptyRoiBehavior parameter.</exception>
-        public bool ConstrainRoi(ref Rectangle roi, Size padding,
-            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
+        public bool ConstrainRoi(
+            ref Rectangle roi,
+            Size padding,
+            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default
+        )
         {
-            return src.ConstrainRoi(ref roi, emptyRoiBehavior, padding.Width, padding.Height, padding.Width,
-                padding.Height);
+            return src.ConstrainRoi(
+                ref roi,
+                emptyRoiBehavior,
+                padding.Width,
+                padding.Height,
+                padding.Width,
+                padding.Height
+            );
         }
 
         /// <summary>
@@ -1590,8 +1844,11 @@ public static partial class EmguCvExtensions
         /// <returns>True if the ROI was modified; otherwise, false.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the ROI is empty or padding is out of bounds and the behavior is set to throw an exception.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when an invalid value is provided for the emptyRoiBehavior parameter.</exception>
-        public bool ConstrainRoi(ref Rectangle roi, int padding,
-            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
+        public bool ConstrainRoi(
+            ref Rectangle roi,
+            int padding,
+            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default
+        )
         {
             return src.ConstrainRoi(ref roi, emptyRoiBehavior, padding, padding, padding, padding);
         }
@@ -1642,8 +1899,13 @@ public static partial class EmguCvExtensions
         /// <param name="padRight">The amount of padding to apply to the right side of the bounding rectangle.</param>
         /// <param name="padBottom">The amount of padding to apply to the bottom side of the bounding rectangle.</param>
         /// <returns>A new matrix representing the bounding rectangle region.</returns>
-        public Mat RoiFromBoundingRectangle(out Rectangle boundingRectangle, int padLeft, int padTop, int padRight,
-            int padBottom)
+        public Mat RoiFromBoundingRectangle(
+            out Rectangle boundingRectangle,
+            int padLeft,
+            int padTop,
+            int padRight,
+            int padBottom
+        )
         {
             if (src.IsEmpty)
             {
@@ -1653,9 +1915,19 @@ public static partial class EmguCvExtensions
 
             boundingRectangle = CvInvoke.BoundingRectangle(src);
 
-            if (!boundingRectangle.IsEmpty && (padLeft != 0 || padTop != 0 || padRight != 0 || padBottom != 0))
+            if (
+                !boundingRectangle.IsEmpty
+                && (padLeft != 0 || padTop != 0 || padRight != 0 || padBottom != 0)
+            )
             {
-                src.ConstrainRoi(ref boundingRectangle, EmptyRoiBehavior.Default, padLeft, padTop, padRight, padBottom);
+                src.ConstrainRoi(
+                    ref boundingRectangle,
+                    EmptyRoiBehavior.Default,
+                    padLeft,
+                    padTop,
+                    padRight,
+                    padBottom
+                );
             }
 
             if (boundingRectangle.Width <= 0 || boundingRectangle.Height <= 0)
@@ -1675,7 +1947,13 @@ public static partial class EmguCvExtensions
         /// <returns>A new matrix representing the bounding rectangle region.</returns>
         public Mat RoiFromBoundingRectangle(out Rectangle boundingRectangle, int padding = 0)
         {
-            return src.RoiFromBoundingRectangle(out boundingRectangle, padding, padding, padding, padding);
+            return src.RoiFromBoundingRectangle(
+                out boundingRectangle,
+                padding,
+                padding,
+                padding,
+                padding
+            );
         }
 
         /// <summary>
@@ -1686,8 +1964,13 @@ public static partial class EmguCvExtensions
         /// <returns>A new matrix representing the bounding rectangle region.</returns>
         public Mat RoiFromBoundingRectangle(out Rectangle boundingRectangle, Size padding)
         {
-            return src.RoiFromBoundingRectangle(out boundingRectangle, padding.Width, padding.Height, padding.Width,
-                padding.Height);
+            return src.RoiFromBoundingRectangle(
+                out boundingRectangle,
+                padding.Width,
+                padding.Height,
+                padding.Width,
+                padding.Height
+            );
         }
 
         /// <summary>
@@ -1706,8 +1989,10 @@ public static partial class EmguCvExtensions
         /// <returns>A new matrix representing the centered region of interest.</returns>
         public Mat RoiFromCenter(Size size)
         {
-            if (src.IsEmpty || size.IsEmpty) return new Mat();
-            if (src.Size == size) return new Mat(src, new Rectangle(Point.Empty, size));
+            if (src.IsEmpty || size.IsEmpty)
+                return new Mat();
+            if (src.Size == size)
+                return new Mat(src, new Rectangle(Point.Empty, size));
 
             var roi = new Rectangle(
                 src.Width / 2 - size.Width / 2,
@@ -1730,8 +2015,14 @@ public static partial class EmguCvExtensions
         /// <param name="padRight">The number of pixels to add to the right side of the ROI.</param>
         /// <param name="padBottom">The number of pixels to add to the bottom side of the ROI.</param>
         /// <returns>A Mat object representing the adjusted region of interest, guaranteed to be within the bounds of the source matrix.</returns>
-        public Mat SafeRoi(ref Rectangle roi, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default,
-            int padLeft = 0, int padTop = 0, int padRight = 0, int padBottom = 0)
+        public Mat SafeRoi(
+            ref Rectangle roi,
+            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default,
+            int padLeft = 0,
+            int padTop = 0,
+            int padRight = 0,
+            int padBottom = 0
+        )
         {
             src.ConstrainRoi(ref roi, emptyRoiBehavior, padLeft, padTop, padRight, padBottom);
             return new Mat(src, roi);
@@ -1744,10 +2035,20 @@ public static partial class EmguCvExtensions
         /// <param name="padding">A Size structure specifying the amount of padding to add to each side of the ROI. The Width and Height represent the horizontal and vertical padding, respectively.</param>
         /// <param name="emptyRoiBehavior">Specifies the behavior when the resulting ROI is empty.</param>
         /// <returns>A Mat object representing the adjusted region of interest, including the specified padding.</returns>
-        public Mat SafeRoi(ref Rectangle roi, Size padding,
-            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
+        public Mat SafeRoi(
+            ref Rectangle roi,
+            Size padding,
+            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default
+        )
         {
-            return src.SafeRoi(ref roi, emptyRoiBehavior, padding.Width, padding.Height, padding.Width, padding.Height);
+            return src.SafeRoi(
+                ref roi,
+                emptyRoiBehavior,
+                padding.Width,
+                padding.Height,
+                padding.Width,
+                padding.Height
+            );
         }
 
         /// <summary>
@@ -1757,7 +2058,11 @@ public static partial class EmguCvExtensions
         /// <param name="padding">An integer specifying the amount of padding to add to each side of the ROI.</param>
         /// <param name="emptyRoiBehavior">Specifies the behavior when the resulting ROI is empty.</param>
         /// <returns>A Mat object representing the adjusted region of interest, including the specified padding.</returns>
-        public Mat SafeRoi(ref Rectangle roi, int padding, EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default)
+        public Mat SafeRoi(
+            ref Rectangle roi,
+            int padding,
+            EmptyRoiBehavior emptyRoiBehavior = EmptyRoiBehavior.Default
+        )
         {
             return src.SafeRoi(ref roi, emptyRoiBehavior, padding, padding, padding, padding);
         }
@@ -1796,8 +2101,11 @@ public static partial class EmguCvExtensions
         public int GetRowPos(int y)
         {
             if ((uint)y >= (uint)src.Height)
-                throw new ArgumentOutOfRangeException(nameof(y), y,
-                    $"Y must be in the range [0, {src.Height}).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(y),
+                    y,
+                    $"Y must be in the range [0, {src.Height})."
+                );
             return checked(y * src.Step);
         }
 
@@ -1831,7 +2139,9 @@ public static partial class EmguCvExtensions
         public byte GetByte(int pos)
         {
             if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
-                throw new InvalidOperationException("Cannot read from an empty or uninitialized Mat.");
+                throw new InvalidOperationException(
+                    "Cannot read from an empty or uninitialized Mat."
+                );
             ValidateByteRange(src, pos, 1);
             unsafe
             {
@@ -1868,7 +2178,9 @@ public static partial class EmguCvExtensions
         public void SetByte(int pixel, byte value)
         {
             if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
-                throw new InvalidOperationException("Cannot write to an empty or uninitialized Mat.");
+                throw new InvalidOperationException(
+                    "Cannot write to an empty or uninitialized Mat."
+                );
             ValidateByteRange(src, pixel, 1);
             unsafe
             {
@@ -1885,7 +2197,9 @@ public static partial class EmguCvExtensions
         {
             ArgumentNullException.ThrowIfNull(value);
             if (src.IsEmpty || src.DataPointer == IntPtr.Zero)
-                throw new InvalidOperationException("Cannot write to an empty or uninitialized Mat.");
+                throw new InvalidOperationException(
+                    "Cannot write to an empty or uninitialized Mat."
+                );
             ValidateByteRange(src, pixel, value.Length);
             unsafe
             {
@@ -1932,7 +2246,8 @@ public static partial class EmguCvExtensions
         public byte[] ToArray()
         {
             var length = src.ByteCountInt32;
-            if (length == 0) return [];
+            if (length == 0)
+                return [];
             var copy = GC.AllocateUninitializedArray<byte>(length);
             if (src.IsContinuous)
             {
@@ -1982,7 +2297,8 @@ public static partial class EmguCvExtensions
         /// <param name="length">Pixel span length</param>
         /// <returns>Pixel position in the span, or -1 if not found</returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
-        public int FindFirstPixelEqualTo<T>(T value, int startPos = 0, int length = 0) where T : struct
+        public int FindFirstPixelEqualTo<T>(T value, int startPos = 0, int length = 0)
+            where T : struct
         {
             var span = src.GetReadOnlySpan<T>(length, startPos);
             var found = span.IndexOf(value, null);
@@ -2000,7 +2316,8 @@ public static partial class EmguCvExtensions
         public int FindFirstPixelLessThan<T>(T value, int startPos = 0, int length = 0)
             where T : struct, IBinaryInteger<T>, IMinMaxValue<T>
         {
-            if (value == T.MinValue) return -1;
+            if (value == T.MinValue)
+                return -1;
             var span = src.GetReadOnlySpan<T>(length, startPos);
             var found = span.IndexOfAnyInRange(T.MinValue, value - T.One);
             return found < 0 ? -1 : startPos + found;
@@ -2033,7 +2350,8 @@ public static partial class EmguCvExtensions
         public int FindFirstPixelGreaterThan<T>(T value, int startPos = 0, int length = 0)
             where T : struct, IBinaryInteger<T>, IMinMaxValue<T>
         {
-            if (value == T.MaxValue) return -1;
+            if (value == T.MaxValue)
+                return -1;
             var span = src.GetReadOnlySpan<T>(length, startPos);
             var found = span.IndexOfAnyInRange(value + T.One, T.MaxValue);
             return found < 0 ? -1 : startPos + found;
@@ -2066,15 +2384,21 @@ public static partial class EmguCvExtensions
         /// <param name="thresholdMaxGrey">Grey value to set when the threshold is above the limit.</param>
         /// <returns></returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
-        public GreyStride[] ScanStrides(int strideLimit = 0, bool breakOnRows = false,
-            bool startOnFirstPositivePixel = false, bool excludeBlacks = false, byte thresholdGrey = 0,
-            byte thresholdMaxGrey = byte.MaxValue)
+        public GreyStride[] ScanStrides(
+            int strideLimit = 0,
+            bool breakOnRows = false,
+            bool startOnFirstPositivePixel = false,
+            bool excludeBlacks = false,
+            byte thresholdGrey = 0,
+            byte thresholdMaxGrey = byte.MaxValue
+        )
         {
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
             ArgumentOutOfRangeException.ThrowIfNegative(strideLimit);
             ArgumentOutOfRangeException.ThrowIfEqual(strideLimit, 1);
 
-            if (src.IsEmpty) return [];
+            if (src.IsEmpty)
+                return [];
 
             using var result = new BufferWriterSlim<GreyStride>(stackalloc GreyStride[128]);
 
@@ -2102,7 +2426,8 @@ public static partial class EmguCvExtensions
                         grey = grey <= thresholdGrey ? byte.MinValue : thresholdMaxGrey;
                     }
 
-                    if (grey == 0) continue;
+                    if (grey == 0)
+                        continue;
                     index = i;
                     location.X = i % maxWidth;
                     location.Y = y = i / maxWidth;
@@ -2124,7 +2449,8 @@ public static partial class EmguCvExtensions
 
                     if (breakOnRows && stride > 0)
                     {
-                        if (!excludeBlacks || grey > 0) result.Add(new GreyStride(index, location, stride, grey));
+                        if (!excludeBlacks || grey > 0)
+                            result.Add(new GreyStride(index, location, stride, grey));
                         index = i;
                         location.X = 0;
                         location.Y = y;
@@ -2155,7 +2481,8 @@ public static partial class EmguCvExtensions
                     stride++;
                     if (stride == strideLimit)
                     {
-                        if (!excludeBlacks || grey > 0) result.Add(new GreyStride(index, location, stride, grey));
+                        if (!excludeBlacks || grey > 0)
+                            result.Add(new GreyStride(index, location, stride, grey));
                         index = i + 1;
                         location.X = index % maxWidth;
                         location.Y = index / maxWidth;
@@ -2166,7 +2493,8 @@ public static partial class EmguCvExtensions
                 {
                     if (stride > 0)
                     {
-                        if (!excludeBlacks || grey > 0) result.Add(new GreyStride(index, location, stride, grey));
+                        if (!excludeBlacks || grey > 0)
+                            result.Add(new GreyStride(index, location, stride, grey));
                         index = i;
                         location.X = x;
                         location.Y = y;
@@ -2198,15 +2526,21 @@ public static partial class EmguCvExtensions
         /// <param name="excludeBlacks">True to exclude black strides from returning, otherwise false.</param>
         /// <returns></returns>
         /// <exception cref="NotSupportedException">Thrown when the matrix is not continuous (e.g. a partial-width ROI).</exception>
-        public GreyStride[] ScanStrides(Func<byte, byte> greyFunc, int strideLimit = 0, bool breakOnRows = false,
-            bool startOnFirstPositivePixel = false, bool excludeBlacks = false)
+        public GreyStride[] ScanStrides(
+            Func<byte, byte> greyFunc,
+            int strideLimit = 0,
+            bool breakOnRows = false,
+            bool startOnFirstPositivePixel = false,
+            bool excludeBlacks = false
+        )
         {
             ArgumentNullException.ThrowIfNull(greyFunc);
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
             ArgumentOutOfRangeException.ThrowIfNegative(strideLimit);
             ArgumentOutOfRangeException.ThrowIfEqual(strideLimit, 1);
 
-            if (src.IsEmpty) return [];
+            if (src.IsEmpty)
+                return [];
 
             using var result = new BufferWriterSlim<GreyStride>(stackalloc GreyStride[128]);
 
@@ -2229,7 +2563,8 @@ public static partial class EmguCvExtensions
                 {
                     grey = greyFunc(span[i]);
 
-                    if (grey == 0) continue;
+                    if (grey == 0)
+                        continue;
                     index = i;
                     location.X = i % maxWidth;
                     location.Y = y = i / maxWidth;
@@ -2251,7 +2586,8 @@ public static partial class EmguCvExtensions
 
                     if (breakOnRows && stride > 0)
                     {
-                        if (!excludeBlacks || grey > 0) result.Add(new GreyStride(index, location, stride, grey));
+                        if (!excludeBlacks || grey > 0)
+                            result.Add(new GreyStride(index, location, stride, grey));
                         index = i;
                         location.X = 0;
                         location.Y = y;
@@ -2274,7 +2610,8 @@ public static partial class EmguCvExtensions
                     stride++;
                     if (stride == strideLimit)
                     {
-                        if (!excludeBlacks || grey > 0) result.Add(new GreyStride(index, location, stride, grey));
+                        if (!excludeBlacks || grey > 0)
+                            result.Add(new GreyStride(index, location, stride, grey));
                         index = i + 1;
                         location.X = index % maxWidth;
                         location.Y = index / maxWidth;
@@ -2285,7 +2622,8 @@ public static partial class EmguCvExtensions
                 {
                     if (stride > 0)
                     {
-                        if (!excludeBlacks || grey > 0) result.Add(new GreyStride(index, location, stride, grey));
+                        if (!excludeBlacks || grey > 0)
+                            result.Add(new GreyStride(index, location, stride, grey));
                         index = i;
                         location.X = x;
                         location.Y = y;
@@ -2314,11 +2652,16 @@ public static partial class EmguCvExtensions
         /// <param name="thresholdGrey">Value to threshold the grey, less or equal to this value will set to 0, otherwise 255</param>
         /// <param name="offset">Value to offset the coordinates with.</param>
         /// <returns>Array of all lines</returns>
-        public GreyLine[] ScanLines(bool vertically = false, byte thresholdGrey = 0, Point offset = default)
+        public GreyLine[] ScanLines(
+            bool vertically = false,
+            byte thresholdGrey = 0,
+            Point offset = default
+        )
         {
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
 
-            if (src.IsEmpty) return [];
+            if (src.IsEmpty)
+                return [];
 
             using var lines = new BufferWriterSlim<GreyLine>(stackalloc GreyLine[128]);
 
@@ -2334,7 +2677,11 @@ public static partial class EmguCvExtensions
             if (vertically)
             {
                 // Scanned row by row (cache friendly) with per-column run state, instead of walking the columns
-                return ScanLinesVertically(src, new ThresholdGreyMapper(thresholdGrey, useThreshold), offset);
+                return ScanLinesVertically(
+                    src,
+                    new ThresholdGreyMapper(thresholdGrey, useThreshold),
+                    offset
+                );
             }
             else // Horizontal
             {
@@ -2357,13 +2704,15 @@ public static partial class EmguCvExtensions
 
                         if (line.Grey == 0)
                         {
-                            if (grey == 0) continue;
+                            if (grey == 0)
+                                continue;
                             line.StartX = x + offset.X;
                             line.Grey = grey;
                             continue;
                         }
 
-                        if (grey == line.Grey) continue;
+                        if (grey == line.Grey)
+                            continue;
                         line.EndX = x - 1 + offset.X;
                         lines.Add(line);
 
@@ -2389,12 +2738,17 @@ public static partial class EmguCvExtensions
         /// <param name="vertically">True to scan vertically, otherwise horizontally</param>
         /// <param name="offset">Value to offset the coordinates with.</param>
         /// <returns>Array of all lines</returns>
-        public GreyLine[] ScanLines(Func<byte, byte> greyFunc, bool vertically = false, Point offset = default)
+        public GreyLine[] ScanLines(
+            Func<byte, byte> greyFunc,
+            bool vertically = false,
+            Point offset = default
+        )
         {
             ArgumentNullException.ThrowIfNull(greyFunc);
             ArgumentOutOfRangeException.ThrowIfNotEqual(src.NumberOfChannels, 1);
 
-            if (src.IsEmpty) return [];
+            if (src.IsEmpty)
+                return [];
 
             using var lines = new BufferWriterSlim<GreyLine>(stackalloc GreyLine[128]);
 
@@ -2427,13 +2781,15 @@ public static partial class EmguCvExtensions
 
                         if (line.Grey == 0)
                         {
-                            if (grey == 0) continue;
+                            if (grey == 0)
+                                continue;
                             line.StartX = x + offset.X;
                             line.Grey = grey;
                             continue;
                         }
 
-                        if (grey == line.Grey) continue;
+                        if (grey == line.Grey)
+                            continue;
                         line.EndX = x - 1 + offset.X;
                         lines.Add(line);
 
@@ -2463,13 +2819,28 @@ public static partial class EmguCvExtensions
         /// <param name="thresholdMaxGrey">Grey value to set when the threshold is above the limit.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is the array of scanned strides.</returns>
-        public Task<GreyStride[]> ScanStridesAsync(int strideLimit = 0, bool breakOnRows = false,
-            bool startOnFirstPositivePixel = false, bool excludeBlacks = false, byte thresholdGrey = 0,
-            byte thresholdMaxGrey = byte.MaxValue, CancellationToken cancellationToken = default)
+        public Task<GreyStride[]> ScanStridesAsync(
+            int strideLimit = 0,
+            bool breakOnRows = false,
+            bool startOnFirstPositivePixel = false,
+            bool excludeBlacks = false,
+            byte thresholdGrey = 0,
+            byte thresholdMaxGrey = byte.MaxValue,
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.Run(
-                () => src.ScanStrides(strideLimit, breakOnRows, startOnFirstPositivePixel, excludeBlacks, thresholdGrey,
-                    thresholdMaxGrey), cancellationToken);
+                () =>
+                    src.ScanStrides(
+                        strideLimit,
+                        breakOnRows,
+                        startOnFirstPositivePixel,
+                        excludeBlacks,
+                        thresholdGrey,
+                        thresholdMaxGrey
+                    ),
+                cancellationToken
+            );
         }
 
         /// <summary>
@@ -2482,14 +2853,27 @@ public static partial class EmguCvExtensions
         /// <param name="excludeBlacks">True to exclude black strides from returning, otherwise false.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is the array of scanned strides.</returns>
-        public Task<GreyStride[]> ScanStridesAsync(Func<byte, byte> greyFunc, int strideLimit = 0,
-            bool breakOnRows = false, bool startOnFirstPositivePixel = false, bool excludeBlacks = false,
-            CancellationToken cancellationToken = default)
+        public Task<GreyStride[]> ScanStridesAsync(
+            Func<byte, byte> greyFunc,
+            int strideLimit = 0,
+            bool breakOnRows = false,
+            bool startOnFirstPositivePixel = false,
+            bool excludeBlacks = false,
+            CancellationToken cancellationToken = default
+        )
         {
             ArgumentNullException.ThrowIfNull(greyFunc);
             return Task.Run(
-                () => src.ScanStrides(greyFunc, strideLimit, breakOnRows, startOnFirstPositivePixel, excludeBlacks),
-                cancellationToken);
+                () =>
+                    src.ScanStrides(
+                        greyFunc,
+                        strideLimit,
+                        breakOnRows,
+                        startOnFirstPositivePixel,
+                        excludeBlacks
+                    ),
+                cancellationToken
+            );
         }
 
         /// <summary>
@@ -2500,10 +2884,17 @@ public static partial class EmguCvExtensions
         /// <param name="offset">Value to offset the coordinates with.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is the array of scanned lines.</returns>
-        public Task<GreyLine[]> ScanLinesAsync(bool vertically = false, byte thresholdGrey = 0, Point offset = default,
-            CancellationToken cancellationToken = default)
+        public Task<GreyLine[]> ScanLinesAsync(
+            bool vertically = false,
+            byte thresholdGrey = 0,
+            Point offset = default,
+            CancellationToken cancellationToken = default
+        )
         {
-            return Task.Run(() => src.ScanLines(vertically, thresholdGrey, offset), cancellationToken);
+            return Task.Run(
+                () => src.ScanLines(vertically, thresholdGrey, offset),
+                cancellationToken
+            );
         }
 
         /// <summary>
@@ -2514,8 +2905,12 @@ public static partial class EmguCvExtensions
         /// <param name="offset">Value to offset the coordinates with.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is the array of scanned lines.</returns>
-        public Task<GreyLine[]> ScanLinesAsync(Func<byte, byte> greyFunc, bool vertically = false,
-            Point offset = default, CancellationToken cancellationToken = default)
+        public Task<GreyLine[]> ScanLinesAsync(
+            Func<byte, byte> greyFunc,
+            bool vertically = false,
+            Point offset = default,
+            CancellationToken cancellationToken = default
+        )
         {
             ArgumentNullException.ThrowIfNull(greyFunc);
             return Task.Run(() => src.ScanLines(greyFunc, vertically, offset), cancellationToken);
@@ -2534,8 +2929,17 @@ public static partial class EmguCvExtensions
         public Mat CreateMask(VectorOfVectorOfPoint contours, Point offset = default)
         {
             var mask = InitMat(src.Size); // Always an 8-bit single-channel mask, regardless of the source type
-            CvInvoke.DrawContours(mask, contours, -1, WhiteColor, -1, LineType.EightConnected, null, int.MaxValue,
-                offset);
+            CvInvoke.DrawContours(
+                mask,
+                contours,
+                -1,
+                WhiteColor,
+                -1,
+                LineType.EightConnected,
+                null,
+                int.MaxValue,
+                offset
+            );
             return mask;
         }
 
@@ -2559,7 +2963,8 @@ public static partial class EmguCvExtensions
         public void CopyAreasSmallerThan(double threshold, Mat dst)
         {
             ArgumentNullException.ThrowIfNull(dst);
-            if (threshold <= 1) return;
+            if (threshold <= 1)
+                return;
             using var contours = src.FindContours(out var hierarchy, RetrType.Tree);
             var contourGroups = EmguContours.GetContoursInGroups(contours, hierarchy);
 
@@ -2573,16 +2978,19 @@ public static partial class EmguCvExtensions
                     foreach (var group in contourGroup)
                     {
                         var area = EmguContours.GetContourGroupArea(group);
-                        if (area >= threshold) continue;
+                        if (area >= threshold)
+                            continue;
                         drawContours++;
                         selectedContours.Push(group);
                     }
 
-                    if (selectedContours.Size == 0) continue;
+                    if (selectedContours.Size == 0)
+                        continue;
                     CvInvoke.DrawContours(mask, selectedContours, -1, WhiteColor, -1);
                 }
 
-                if (drawContours > 0) src.CopyTo(dst, mask);
+                if (drawContours > 0)
+                    src.CopyTo(dst, mask);
             }
             finally
             {
@@ -2604,7 +3012,8 @@ public static partial class EmguCvExtensions
         public void CopyAreasLargerThan(double threshold, Mat dst)
         {
             ArgumentNullException.ThrowIfNull(dst);
-            if (threshold <= 0) return;
+            if (threshold <= 0)
+                return;
             using var contours = src.FindContours(out var hierarchy, RetrType.Tree);
             var contourGroups = EmguContours.GetContoursInGroups(contours, hierarchy);
 
@@ -2618,16 +3027,19 @@ public static partial class EmguCvExtensions
                     foreach (var group in contourGroup)
                     {
                         var area = EmguContours.GetContourGroupArea(group);
-                        if (area <= threshold) continue;
+                        if (area <= threshold)
+                            continue;
                         drawContours++;
                         selectedContours.Push(group);
                     }
 
-                    if (selectedContours.Size == 0) continue;
+                    if (selectedContours.Size == 0)
+                        continue;
                     CvInvoke.DrawContours(mask, selectedContours, -1, WhiteColor, -1);
                 }
 
-                if (drawContours > 0) src.CopyTo(dst, mask);
+                if (drawContours > 0)
+                    src.CopyTo(dst, mask);
             }
             finally
             {
@@ -2651,8 +3063,14 @@ public static partial class EmguCvExtensions
         /// <param name="borderType">The border extrapolation method.</param>
         /// <param name="value">The border value when <paramref name="borderType"/> is <see cref="BorderType.Constant"/>.</param>
         /// <returns>A new <see cref="Mat"/> with the added padding.</returns>
-        public Mat Pad(int top, int bottom, int left, int right, BorderType borderType = BorderType.Constant,
-            MCvScalar value = default)
+        public Mat Pad(
+            int top,
+            int bottom,
+            int left,
+            int right,
+            BorderType borderType = BorderType.Constant,
+            MCvScalar value = default
+        )
         {
             var dst = new Mat();
             CvInvoke.CopyMakeBorder(src, dst, top, bottom, left, right, borderType, value);
@@ -2666,7 +3084,11 @@ public static partial class EmguCvExtensions
         /// <param name="borderType">The border extrapolation method.</param>
         /// <param name="value">The border value when <paramref name="borderType"/> is <see cref="BorderType.Constant"/>.</param>
         /// <returns>A new <see cref="Mat"/> with the added padding.</returns>
-        public Mat Pad(int padding, BorderType borderType = BorderType.Constant, MCvScalar value = default)
+        public Mat Pad(
+            int padding,
+            BorderType borderType = BorderType.Constant,
+            MCvScalar value = default
+        )
         {
             return src.Pad(padding, padding, padding, padding, borderType, value);
         }
@@ -2681,8 +3103,10 @@ public static partial class EmguCvExtensions
         /// <param name="compression">The contour approximation method.</param>
         /// <param name="threshold">If <see langword="true"/>, applies a binary threshold before extracting contours.</param>
         /// <returns>A list of SVG path data strings.</returns>
-        public List<string> GetSvgPath(ChainApproxMethod compression = ChainApproxMethod.ChainApproxSimple,
-            bool threshold = true)
+        public List<string> GetSvgPath(
+            ChainApproxMethod compression = ChainApproxMethod.ChainApproxSimple,
+            bool threshold = true
+        )
         {
             var mat = src;
             var paths = new List<string>();
@@ -2694,7 +3118,11 @@ public static partial class EmguCvExtensions
                     CvInvoke.Threshold(src, mat, 127, byte.MaxValue, ThresholdType.Binary);
                 }
 
-                using var contours = mat.FindContours(out var hierarchy, RetrType.Tree, compression);
+                using var contours = mat.FindContours(
+                    out var hierarchy,
+                    RetrType.Tree,
+                    compression
+                );
 
                 var buffer = new BufferWriterSlim<char>(stackalloc char[512]);
                 try
@@ -2704,7 +3132,8 @@ public static partial class EmguCvExtensions
                         // Cache the inner contour to avoid repeated native interop indexer calls
                         var contour = contours[i];
                         var points = contour.ToArray();
-                        if (points.Length == 0) continue;
+                        if (points.Length == 0)
+                            continue;
 
                         if (hierarchy[i, EmguContour.HierarchyParent] == -1) // Top hierarchy
                         {
@@ -2752,7 +3181,8 @@ public static partial class EmguCvExtensions
             }
             finally
             {
-                if (!ReferenceEquals(src, mat)) mat.Dispose();
+                if (!ReferenceEquals(src, mat))
+                    mat.Dispose();
             }
         }
 
@@ -2763,8 +3193,11 @@ public static partial class EmguCvExtensions
         /// <param name="threshold">If <see langword="true"/>, applies a binary threshold before extracting contours.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is a list of SVG path data strings.</returns>
-        public Task<List<string>> GetSvgPathAsync(ChainApproxMethod compression = ChainApproxMethod.ChainApproxSimple,
-            bool threshold = true, CancellationToken cancellationToken = default)
+        public Task<List<string>> GetSvgPathAsync(
+            ChainApproxMethod compression = ChainApproxMethod.ChainApproxSimple,
+            bool threshold = true,
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.Run(() => src.GetSvgPath(compression, threshold), cancellationToken);
         }
@@ -2790,14 +3223,22 @@ public static partial class EmguCvExtensions
         /// image.</param>
         /// <param name="padY">When this method returns, contains the number of pixels of vertical padding added to the top of the image.</param>
         /// <returns>A new Mat object representing the letterboxed image with the specified target size and padding color.</returns>
-        public Mat CreateLetterBox(int targetWidth, int targetHeight, MCvScalar paddingColor,
-            out float scale, out int padX, out int padY)
+        public Mat CreateLetterBox(
+            int targetWidth,
+            int targetHeight,
+            MCvScalar paddingColor,
+            out float scale,
+            out int padX,
+            out int padY
+        )
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(targetWidth);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(targetHeight);
 
             if (src.IsEmpty || src.Width <= 0 || src.Height <= 0)
-                throw new InvalidOperationException("Cannot create a letterbox from an empty or uninitialized Mat.");
+                throw new InvalidOperationException(
+                    "Cannot create a letterbox from an empty or uninitialized Mat."
+                );
 
             var originalSize = src.Size;
             var targetSize = new Size(targetWidth, targetHeight);
@@ -2811,7 +3252,10 @@ public static partial class EmguCvExtensions
 
             // Calculate letterbox parameters
             // Find scale that fits the image within targetSize while maintaining aspect ratio
-            scale = Math.Min((float)targetWidth / originalSize.Width, (float)targetHeight / originalSize.Height);
+            scale = Math.Min(
+                (float)targetWidth / originalSize.Width,
+                (float)targetHeight / originalSize.Height
+            );
             var newWidth = Math.Max(1, (int)(originalSize.Width * scale));
             var newHeight = Math.Max(1, (int)(originalSize.Height * scale));
 
@@ -2822,8 +3266,14 @@ public static partial class EmguCvExtensions
             // Create letterboxed image
             using Mat resized = new();
             // Area interpolation avoids aliasing when shrinking, linear is the better choice when enlarging
-            CvInvoke.Resize(src, resized, new Size(newWidth, newHeight), 0, 0,
-                scale < 1f ? Inter.Area : Inter.Linear);
+            CvInvoke.Resize(
+                src,
+                resized,
+                new Size(newWidth, newHeight),
+                0,
+                0,
+                scale < 1f ? Inter.Area : Inter.Linear
+            );
 
             // Create padded image
             var letterboxed = new Mat(targetSize, src.Depth, src.NumberOfChannels);
@@ -2861,10 +3311,22 @@ public static partial class EmguCvExtensions
         /// <param name="padY">When this method returns, contains the number of pixels of vertical padding added to center the image within
         /// the target height.</param>
         /// <returns>A new Mat object containing the letterboxed image with the specified target dimensions.</returns>
-        public Mat CreateLetterBox(int targetWidth, int targetHeight, out float scale, out int padX, out int padY)
+        public Mat CreateLetterBox(
+            int targetWidth,
+            int targetHeight,
+            out float scale,
+            out int padX,
+            out int padY
+        )
         {
-            return src.CreateLetterBox(targetWidth, targetHeight, new MCvScalar(0, 0, 0, 255), out scale, out padX,
-                out padY);
+            return src.CreateLetterBox(
+                targetWidth,
+                targetHeight,
+                new MCvScalar(0, 0, 0, 255),
+                out scale,
+                out padX,
+                out padY
+            );
         }
 
         #endregion
@@ -2880,15 +3342,30 @@ public static partial class EmguCvExtensions
         /// <param name="yTrans"></param>
         /// <param name="dstSize"></param>
         /// <param name="interpolation"></param>
-        public void Transform(double xScale, double yScale, double xTrans = 0, double yTrans = 0,
-            Size dstSize = default, Inter interpolation = Inter.Linear)
+        public void Transform(
+            double xScale,
+            double yScale,
+            double xTrans = 0,
+            double yTrans = 0,
+            Size dstSize = default,
+            Inter interpolation = Inter.Linear
+        )
         {
-            using var translateTransform = new Matrix<double>(2, 3);
-            translateTransform[0, 0] = xScale; // xScale
-            translateTransform[1, 1] = yScale; // yScale
-            translateTransform[0, 2] = xTrans; //x translation + compensation of x scaling
-            translateTransform[1, 2] = yTrans; // y translation + compensation of y scaling
-            CvInvoke.WarpAffine(src, src, translateTransform, dstSize.IsEmpty ? src.Size : dstSize, interpolation);
+            using var translateTransform = new Mat(2, 3, DepthType.Cv64F, 1);
+            var transform = translateTransform.GetSpan2D<double>();
+            transform[0, 0] = xScale; // xScale
+            transform[0, 1] = 0;
+            transform[1, 0] = 0;
+            transform[1, 1] = yScale; // yScale
+            transform[0, 2] = xTrans; //x translation + compensation of x scaling
+            transform[1, 2] = yTrans; // y translation + compensation of y scaling
+            CvInvoke.WarpAffine(
+                src,
+                src,
+                translateTransform,
+                dstSize.IsEmpty ? src.Size : dstSize,
+                interpolation
+            );
         }
 
         /// <summary>
@@ -2909,7 +3386,12 @@ public static partial class EmguCvExtensions
         /// <param name="angle"></param>
         /// <param name="newSize"></param>
         /// <param name="scale"></param>
-        public void RotateFromCenter(Mat dst, double angle, Size newSize = default, double scale = 1.0)
+        public void RotateFromCenter(
+            Mat dst,
+            double angle,
+            Size newSize = default,
+            double scale = 1.0
+        )
         {
             if (angle % 360 == 0 && Math.Abs(scale - 1.0) < 0.001)
             {
@@ -2928,14 +3410,20 @@ public static partial class EmguCvExtensions
 
             var halfWidth = src.Width / 2.0f;
             var halfHeight = src.Height / 2.0f;
-            using var translateTransform = new Matrix<double>(2, 3);
-            CvInvoke.GetRotationMatrix2D(new PointF(halfWidth, halfHeight), -angle, scale, translateTransform);
+            using var translateTransform = new Mat(2, 3, DepthType.Cv64F, 1);
+            CvInvoke.GetRotationMatrix2D(
+                new PointF(halfWidth, halfHeight),
+                -angle,
+                scale,
+                translateTransform
+            );
+            var transform = translateTransform.GetSpan2D<double>();
 
             if (src.Size != newSize)
             {
                 // adjust the rotation matrix to take into account translation
-                translateTransform[0, 2] += newSize.Width / 2.0 - halfWidth;
-                translateTransform[1, 2] += newSize.Height / 2.0 - halfHeight;
+                transform[0, 2] += newSize.Width / 2.0 - halfWidth;
+                transform[1, 2] += newSize.Height / 2.0 - halfHeight;
             }
 
             CvInvoke.WarpAffine(src, dst, translateTransform, newSize);
@@ -2971,10 +3459,16 @@ public static partial class EmguCvExtensions
 
             var halfWidth = src.Width / 2.0f;
             var halfHeight = src.Height / 2.0f;
-            using var translateTransform = new Matrix<double>(2, 3);
-            CvInvoke.GetRotationMatrix2D(new PointF(halfWidth, halfHeight), -angle, scale, translateTransform);
-            var cos = Math.Abs(translateTransform[0, 0]);
-            var sin = Math.Abs(translateTransform[0, 1]);
+            using var translateTransform = new Mat(2, 3, DepthType.Cv64F, 1);
+            CvInvoke.GetRotationMatrix2D(
+                new PointF(halfWidth, halfHeight),
+                -angle,
+                scale,
+                translateTransform
+            );
+            var transform = translateTransform.GetSpan2D<double>();
+            var cos = Math.Abs(transform[0, 0]);
+            var sin = Math.Abs(transform[0, 1]);
 
             // compute the new bounding dimensions of the image
             // Round up (tolerating floating point noise) so the rotated content is never cropped by a pixel
@@ -2982,9 +3476,8 @@ public static partial class EmguCvExtensions
             var newHeight = (int)Math.Ceiling(src.Height * cos + src.Width * sin - 1e-6);
 
             // adjust the rotation matrix to take into account translation
-            translateTransform[0, 2] += newWidth / 2.0 - halfWidth;
-            translateTransform[1, 2] += newHeight / 2.0 - halfHeight;
-
+            transform[0, 2] += newWidth / 2.0 - halfWidth;
+            transform[1, 2] += newHeight / 2.0 - halfHeight;
 
             CvInvoke.WarpAffine(src, dst, translateTransform, new Size(newWidth, newHeight));
         }
@@ -2999,12 +3492,23 @@ public static partial class EmguCvExtensions
         /// <param name="yTrans">Y translation</param>
         /// <param name="dstSize">Destination size</param>
         /// <param name="interpolation">Interpolation mode</param>
-        public void TransformFromCenter(double xScale, double yScale, double xTrans = 0, double yTrans = 0,
-            Size dstSize = default, Inter interpolation = Inter.Linear)
+        public void TransformFromCenter(
+            double xScale,
+            double yScale,
+            double xTrans = 0,
+            double yTrans = 0,
+            Size dstSize = default,
+            Inter interpolation = Inter.Linear
+        )
         {
-            src.Transform(xScale, yScale,
+            src.Transform(
+                xScale,
+                yScale,
                 xTrans + (src.Width - src.Width * xScale) / 2.0,
-                yTrans + (src.Height - src.Height * yScale) / 2.0, dstSize, interpolation);
+                yTrans + (src.Height - src.Height * yScale) / 2.0,
+                dstSize,
+                interpolation
+            );
         }
 
         /// <summary>
@@ -3015,12 +3519,25 @@ public static partial class EmguCvExtensions
         public void Resize(double scale, Inter interpolation = Inter.Linear)
         {
             if (!double.IsFinite(scale) || scale <= 0)
-                throw new ArgumentOutOfRangeException(nameof(scale), scale, "Scale must be a finite value greater than zero.");
-            if (Math.Abs(scale - 1) < 0.001) return;
+                throw new ArgumentOutOfRangeException(
+                    nameof(scale),
+                    scale,
+                    "Scale must be a finite value greater than zero."
+                );
+            if (Math.Abs(scale - 1) < 0.001)
+                return;
             // Never collapse a dimension to zero, OpenCV rejects empty destination sizes
-            CvInvoke.Resize(src, src,
-                new Size(Math.Max(1, (int)(src.Width * scale)), Math.Max(1, (int)(src.Height * scale))), 0, 0,
-                interpolation);
+            CvInvoke.Resize(
+                src,
+                src,
+                new Size(
+                    Math.Max(1, (int)(src.Width * scale)),
+                    Math.Max(1, (int)(src.Height * scale))
+                ),
+                0,
+                0,
+                interpolation
+            );
         }
 
         /// <summary>
@@ -3031,18 +3548,31 @@ public static partial class EmguCvExtensions
         /// <param name="maxHeight">The maximum height, in pixels, of the output image.</param>
         /// <param name="interpolation">The interpolation method to use when resizing.</param>
         /// <returns><see langword="true"/> if the image was shrunk; otherwise <see langword="false"/>.</returns>
-        public bool ShrinkToFitPreserveAspect(int maxWidth, int maxHeight, Inter interpolation = Inter.Linear)
+        public bool ShrinkToFitPreserveAspect(
+            int maxWidth,
+            int maxHeight,
+            Inter interpolation = Inter.Linear
+        )
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxWidth);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxHeight);
 
             var scale = Math.Min((double)maxWidth / src.Width, (double)maxHeight / src.Height);
-            if (scale >= 1.0) return false;
+            if (scale >= 1.0)
+                return false;
 
             // Never collapse a dimension to zero (e.g. a 10000x1 image), OpenCV rejects empty destination sizes
-            CvInvoke.Resize(src, src,
-                new Size(Math.Max(1, (int)(src.Width * scale)), Math.Max(1, (int)(src.Height * scale))),
-                0, 0, interpolation);
+            CvInvoke.Resize(
+                src,
+                src,
+                new Size(
+                    Math.Max(1, (int)(src.Width * scale)),
+                    Math.Max(1, (int)(src.Height * scale))
+                ),
+                0,
+                0,
+                interpolation
+            );
             return true;
         }
 
@@ -3055,7 +3585,12 @@ public static partial class EmguCvExtensions
         /// <param name="maxHeight">The maximum height, in pixels, of the output image.</param>
         /// <param name="interpolation">The interpolation method to use when resizing.</param>
         /// <returns><see langword="true"/> if the image was shrunk; otherwise <see langword="false"/>.</returns>
-        public bool ShrinkToFitPreserveAspect(Mat dst, int maxWidth, int maxHeight, Inter interpolation = Inter.Linear)
+        public bool ShrinkToFitPreserveAspect(
+            Mat dst,
+            int maxWidth,
+            int maxHeight,
+            Inter interpolation = Inter.Linear
+        )
         {
             ArgumentNullException.ThrowIfNull(dst);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxWidth);
@@ -3072,9 +3607,17 @@ public static partial class EmguCvExtensions
                 return false;
             }
 
-            CvInvoke.Resize(src, dst,
-                new Size(Math.Max(1, (int)(src.Width * scale)), Math.Max(1, (int)(src.Height * scale))),
-                0, 0, interpolation);
+            CvInvoke.Resize(
+                src,
+                dst,
+                new Size(
+                    Math.Max(1, (int)(src.Width * scale)),
+                    Math.Max(1, (int)(src.Height * scale))
+                ),
+                0,
+                0,
+                interpolation
+            );
             return true;
         }
 
@@ -3109,8 +3652,13 @@ public static partial class EmguCvExtensions
         /// <param name="color">The color of the line.</param>
         /// <param name="thickness">The thickness of the line in pixels.</param>
         /// <param name="lineType">The type of line to draw.</param>
-        public void DrawLineAccurate(Point pt1, Point pt2, MCvScalar color, int thickness,
-            LineType lineType = LineType.EightConnected)
+        public void DrawLineAccurate(
+            Point pt1,
+            Point pt2,
+            MCvScalar color,
+            int thickness,
+            LineType lineType = LineType.EightConnected
+        )
         {
             if (thickness >= 3)
             {
@@ -3129,10 +3677,23 @@ public static partial class EmguCvExtensions
         /// <param name="angle">The rotation angle in degrees.</param>
         /// <param name="thickness">The thickness of the outline. Use -1 for a filled square.</param>
         /// <param name="lineType">The type of line to draw.</param>
-        public void DrawRotatedSquare(int size, Point center, MCvScalar color, int angle = 0, int thickness = -1,
-            LineType lineType = LineType.EightConnected)
+        public void DrawRotatedSquare(
+            int size,
+            Point center,
+            MCvScalar color,
+            int angle = 0,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected
+        )
         {
-            src.DrawRotatedRectangle(new Size(size, size), center, color, angle, thickness, lineType);
+            src.DrawRotatedRectangle(
+                new Size(size, size),
+                center,
+                color,
+                angle,
+                thickness,
+                lineType
+            );
         }
 
         /// <summary>
@@ -3144,8 +3705,14 @@ public static partial class EmguCvExtensions
         /// <param name="angle">The rotation angle in degrees.</param>
         /// <param name="thickness">The thickness of the outline. Use -1 for a filled rectangle.</param>
         /// <param name="lineType">The type of line to draw.</param>
-        public void DrawRotatedRectangle(Size size, Point center, MCvScalar color, int angle = 0, int thickness = -1,
-            LineType lineType = LineType.EightConnected)
+        public void DrawRotatedRectangle(
+            Size size,
+            Point center,
+            MCvScalar color,
+            int angle = 0,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected
+        )
         {
             if (angle == 0)
             {
@@ -3184,8 +3751,13 @@ public static partial class EmguCvExtensions
         /// <param name="color">The color of the square.</param>
         /// <param name="thickness">The thickness of the outline. Use -1 for a filled square.</param>
         /// <param name="lineType">The type of line to draw.</param>
-        public void DrawCenteredSquare(int size, Point center, MCvScalar color, int thickness = -1,
-            LineType lineType = LineType.EightConnected)
+        public void DrawCenteredSquare(
+            int size,
+            Point center,
+            MCvScalar color,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected
+        )
         {
             src.DrawCenteredRectangle(new Size(size, size), center, color, thickness, lineType);
         }
@@ -3198,8 +3770,13 @@ public static partial class EmguCvExtensions
         /// <param name="color">The color of the rectangle.</param>
         /// <param name="thickness">The thickness of the outline. Use -1 for a filled rectangle.</param>
         /// <param name="lineType">The type of line to draw.</param>
-        public void DrawCenteredRectangle(Size size, Point center, MCvScalar color, int thickness = -1,
-            LineType lineType = LineType.EightConnected)
+        public void DrawCenteredRectangle(
+            Size size,
+            Point center,
+            MCvScalar color,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected
+        )
         {
             center.Offset(size.Width / -2, size.Height / -2);
             CvInvoke.Rectangle(src, new Rectangle(center, size), color, thickness, lineType);
@@ -3217,13 +3794,24 @@ public static partial class EmguCvExtensions
         /// <param name="lineType">The type of line to draw.</param>
         /// <param name="flip">An optional flip transformation to apply.</param>
         /// <param name="midpointRounding">The rounding mode for vertex coordinates.</param>
-        public void DrawPolygon(int sides, SizeF diameter, PointF center, MCvScalar color, double startingAngle = 0,
-            int thickness = -1, LineType lineType = LineType.EightConnected, FlipType? flip = null,
-            MidpointRounding midpointRounding = MidpointRounding.AwayFromZero)
+        public void DrawPolygon(
+            int sides,
+            SizeF diameter,
+            PointF center,
+            MCvScalar color,
+            double startingAngle = 0,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected,
+            FlipType? flip = null,
+            MidpointRounding midpointRounding = MidpointRounding.AwayFromZero
+        )
         {
             if (sides == 1)
             {
-                var point1 = center with { X = MathF.Round(center.X - diameter.Width / 2, midpointRounding) };
+                var point1 = center with
+                {
+                    X = MathF.Round(center.X - diameter.Width / 2, midpointRounding),
+                };
                 var point2 = point1 with { X = point1.X + diameter.Width - 1 };
                 point1 = point1.Rotate(startingAngle, center);
                 point2 = point2.Rotate(startingAngle, center);
@@ -3244,24 +3832,41 @@ public static partial class EmguCvExtensions
                     point2 = newPoint2;
                 }
 
-                CvInvoke.Line(src, point1.ToPoint(midpointRounding), point2.ToPoint(midpointRounding), color,
-                    thickness < 1 ? 1 : thickness, lineType);
+                CvInvoke.Line(
+                    src,
+                    point1.ToPoint(midpointRounding),
+                    point2.ToPoint(midpointRounding),
+                    color,
+                    thickness < 1 ? 1 : thickness,
+                    lineType
+                );
                 return;
             }
 
             if (sides >= 100)
             {
-                src.DrawCircle(center.ToPoint(midpointRounding),
-                    new Size((int)Math.Round(diameter.Width / 2, midpointRounding),
-                        (int)Math.Round(diameter.Height / 2, midpointRounding)),
-                    color, -1, lineType);
+                src.DrawCircle(
+                    center.ToPoint(midpointRounding),
+                    new Size(
+                        (int)Math.Round(diameter.Width / 2, midpointRounding),
+                        (int)Math.Round(diameter.Height / 2, midpointRounding)
+                    ),
+                    color,
+                    -1,
+                    lineType
+                );
                 return;
             }
 
-            var points = DrawingExtensions.GetPolygonVertices(sides, diameter, center, startingAngle,
+            var points = DrawingExtensions.GetPolygonVertices(
+                sides,
+                diameter,
+                center,
+                startingAngle,
                 flip is FlipType.Horizontal or FlipType.Both,
                 flip is FlipType.Vertical or FlipType.Both,
-                midpointRounding);
+                midpointRounding
+            );
 
             if (thickness <= 0)
             {
@@ -3286,12 +3891,29 @@ public static partial class EmguCvExtensions
         /// <param name="lineType"></param>
         /// <param name="flip"></param>
         /// <param name="midpointRounding"></param>
-        public void DrawPolygon(int sides, float diameter, PointF center, MCvScalar color, double startingAngle = 0,
-            int thickness = -1, LineType lineType = LineType.EightConnected, FlipType? flip = null,
-            MidpointRounding midpointRounding = MidpointRounding.AwayFromZero)
+        public void DrawPolygon(
+            int sides,
+            float diameter,
+            PointF center,
+            MCvScalar color,
+            double startingAngle = 0,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected,
+            FlipType? flip = null,
+            MidpointRounding midpointRounding = MidpointRounding.AwayFromZero
+        )
         {
-            src.DrawPolygon(sides, new SizeF(diameter, diameter), center, color, startingAngle, thickness, lineType,
-                flip, midpointRounding);
+            src.DrawPolygon(
+                sides,
+                new SizeF(diameter, diameter),
+                center,
+                color,
+                startingAngle,
+                thickness,
+                lineType,
+                flip,
+                midpointRounding
+            );
         }
 
         /// <summary>
@@ -3306,16 +3928,34 @@ public static partial class EmguCvExtensions
         /// <param name="lineType"></param>
         /// <param name="flip"></param>
         /// <param name="midpointRounding"></param>
-        public void DrawAlignedPolygon(int sides, SizeF diameter, PointF center, MCvScalar color,
-            double startingAngle = 0, int thickness = -1, LineType lineType = LineType.EightConnected,
-            FlipType? flip = null, MidpointRounding midpointRounding = MidpointRounding.AwayFromZero)
+        public void DrawAlignedPolygon(
+            int sides,
+            SizeF diameter,
+            PointF center,
+            MCvScalar color,
+            double startingAngle = 0,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected,
+            FlipType? flip = null,
+            MidpointRounding midpointRounding = MidpointRounding.AwayFromZero
+        )
         {
             if (sides >= 3 && sides != 4)
             {
                 startingAngle += (180 - 360.0 / sides) / 2;
             }
 
-            src.DrawPolygon(sides, diameter, center, color, startingAngle, thickness, lineType, flip, midpointRounding);
+            src.DrawPolygon(
+                sides,
+                diameter,
+                center,
+                color,
+                startingAngle,
+                thickness,
+                lineType,
+                flip,
+                midpointRounding
+            );
         }
 
         /// <summary>
@@ -3335,17 +3975,34 @@ public static partial class EmguCvExtensions
         /// <param name="lineType">The type of the line used to draw the polygon's edges.</param>
         /// <param name="flip">An optional flip transformation to apply to the polygon before drawing. If null, no flip is applied.</param>
         /// <param name="midpointRounding">Specifies how to round midpoint values when calculating vertex positions.</param>
-        public void DrawAlignedPolygon(int sides, float diameter, PointF center, MCvScalar color,
-            double startingAngle = 0, int thickness = -1, LineType lineType = LineType.EightConnected,
-            FlipType? flip = null, MidpointRounding midpointRounding = MidpointRounding.AwayFromZero)
+        public void DrawAlignedPolygon(
+            int sides,
+            float diameter,
+            PointF center,
+            MCvScalar color,
+            double startingAngle = 0,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected,
+            FlipType? flip = null,
+            MidpointRounding midpointRounding = MidpointRounding.AwayFromZero
+        )
         {
             if (sides >= 3 && sides != 4)
             {
                 startingAngle += (180 - 360.0 / sides) / 2;
             }
 
-            src.DrawPolygon(sides, new SizeF(diameter, diameter), center, color, startingAngle, thickness, lineType,
-                flip, midpointRounding);
+            src.DrawPolygon(
+                sides,
+                new SizeF(diameter, diameter),
+                center,
+                color,
+                startingAngle,
+                thickness,
+                lineType,
+                flip,
+                midpointRounding
+            );
         }
 
         /// <summary>
@@ -3356,8 +4013,13 @@ public static partial class EmguCvExtensions
         /// <param name="color"></param>
         /// <param name="thickness"></param>
         /// <param name="lineType"></param>
-        public void DrawCircle(Point center, Size radius, MCvScalar color, int thickness = -1,
-            LineType lineType = LineType.EightConnected)
+        public void DrawCircle(
+            Point center,
+            Size radius,
+            MCvScalar color,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected
+        )
         {
             if (Math.Abs(radius.Width - radius.Height) < 0.01)
             {
@@ -3377,8 +4039,13 @@ public static partial class EmguCvExtensions
         /// <param name="color"></param>
         /// <param name="thickness"></param>
         /// <param name="lineType"></param>
-        public void DrawCircle(Point center, int radius, MCvScalar color, int thickness = -1,
-            LineType lineType = LineType.EightConnected)
+        public void DrawCircle(
+            Point center,
+            int radius,
+            MCvScalar color,
+            int thickness = -1,
+            LineType lineType = LineType.EightConnected
+        )
         {
             CvInvoke.Circle(src, center, radius, color, thickness, lineType);
         }
@@ -3390,90 +4057,111 @@ public static partial class EmguCvExtensions
         /// <summary>
         /// Extended OpenCV PutText to accepting line breaks, line alignment and rotation
         /// </summary>
-        public void PutTextRotated(string text, Point org, FontFace fontFace, double fontScale,
+        public void PutTextRotated(
+            string text,
+            Point org,
+            HersheyFonts fontFace,
+            double fontScale,
             MCvScalar color,
-            int thickness = 1, LineType lineType = LineType.EightConnected, bool bottomLeftOrigin = false,
-            PutTextLineAlignment lineAlignment = default, double angle = 0)
+            int thickness = 1,
+            LineType lineType = LineType.EightConnected,
+            bool bottomLeftOrigin = false,
+            PutTextLineAlignment lineAlignment = default,
+            double angle = 0
+        )
         {
-            src.PutTextRotated(text, org, fontFace, fontScale, color, thickness, 0, lineType, bottomLeftOrigin,
-                lineAlignment, angle);
+            src.PutTextRotated(
+                text,
+                org,
+                fontFace,
+                fontScale,
+                color,
+                thickness,
+                0,
+                lineType,
+                bottomLeftOrigin,
+                lineAlignment,
+                angle
+            );
         }
 
         /// <summary>
         /// Extended OpenCV PutText to accepting line breaks, line alignment and rotation
         /// </summary>
-        public void PutTextRotated(string text, Point org, FontFace fontFace, double fontScale, MCvScalar color,
-            int thickness = 1, int lineGapOffset = 0, LineType lineType = LineType.EightConnected,
-            bool bottomLeftOrigin = false, PutTextLineAlignment lineAlignment = default, double angle = 0)
+        public void PutTextRotated(
+            string text,
+            Point org,
+            HersheyFonts fontFace,
+            double fontScale,
+            MCvScalar color,
+            int thickness = 1,
+            int lineGapOffset = 0,
+            LineType lineType = LineType.EightConnected,
+            bool bottomLeftOrigin = false,
+            PutTextLineAlignment lineAlignment = default,
+            double angle = 0
+        )
         {
             if (angle % 360 == 0) // No rotation needed, cheaper cycle
             {
-                src.PutTextExtended(text, org, fontFace, fontScale, color, thickness, lineGapOffset, lineType,
-                    bottomLeftOrigin, lineAlignment);
+                src.PutTextExtended(
+                    text,
+                    org,
+                    fontFace,
+                    fontScale,
+                    color,
+                    thickness,
+                    lineGapOffset,
+                    lineType,
+                    bottomLeftOrigin,
+                    lineAlignment
+                );
                 return;
             }
 
             ArgumentNullException.ThrowIfNull(text);
-            if (src.IsEmpty) return;
+            if (src.IsEmpty)
+                return;
 
             // Instead of rotating copies of the whole image, the text is rendered on a small layer around its origin:
             // the layer is the text bounds, with the text origin at (margin, extentY), the text spans at most
             // extentY above or below its origin (multiline and bottom-left origin grow in either direction)
             var baseLine = 0;
-            var textSize = GetTextSizeExtended(text, fontFace, fontScale, thickness, lineGapOffset, ref baseLine,
-                lineAlignment);
+            var textSize = GetTextSizeExtended(
+                text,
+                fontFace,
+                fontScale,
+                thickness,
+                lineGapOffset,
+                ref baseLine,
+                lineAlignment
+            );
             var margin = thickness + 2;
             var extentY = textSize.Height + baseLine + margin;
             var layerSize = new Size(textSize.Width + margin * 2, extentY * 2);
             var layerOrg = new Point(margin, extentY);
 
-            // Forward transform layer -> src: rotates around the text origin, then moves the origin into place
-            using var forward = new Matrix<double>(2, 3);
-            CvInvoke.GetRotationMatrix2D(new PointF(layerOrg.X, layerOrg.Y), -angle, 1.0, forward);
-            forward[0, 2] += org.X - layerOrg.X;
-            forward[1, 2] += org.Y - layerOrg.Y;
-
-            // Bounds of the rotated layer inside src, nothing to draw when it is entirely outside
-            double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
-            for (var i = 0; i < 4; i++)
-            {
-                var cornerX = (i & 1) == 0 ? 0 : layerSize.Width;
-                var cornerY = (i & 2) == 0 ? 0 : layerSize.Height;
-                var x = forward[0, 0] * cornerX + forward[0, 1] * cornerY + forward[0, 2];
-                var y = forward[1, 0] * cornerX + forward[1, 1] * cornerY + forward[1, 2];
-                minX = Math.Min(minX, x);
-                minY = Math.Min(minY, y);
-                maxX = Math.Max(maxX, x);
-                maxY = Math.Max(maxY, y);
-            }
-
-            var region = Rectangle.Intersect(
-                Rectangle.FromLTRB((int)Math.Floor(minX) - 1, (int)Math.Floor(minY) - 1,
-                    (int)Math.Ceiling(maxX) + 1, (int)Math.Ceiling(maxY) + 1),
-                new Rectangle(Point.Empty, src.Size));
-            if (region.Width <= 0 || region.Height <= 0) return;
-
-            // Background of the layer is the (inverse rotated) image, so the anti-aliased text edges blend with the real background
-            using var layer = new Mat();
-            CvInvoke.WarpAffine(src, layer, forward, layerSize, Inter.Linear, Warp.InverseMap, BorderType.Replicate);
-            layer.PutTextExtended(text, layerOrg, fontFace, fontScale, color, thickness, lineGapOffset, lineType,
-                bottomLeftOrigin, lineAlignment);
-
-            using var layerMask = InitMat(layerSize);
-            layerMask.PutTextExtended(text, layerOrg, fontFace, fontScale, WhiteColor, thickness, lineGapOffset,
-                lineType, bottomLeftOrigin, lineAlignment);
-
-            // Rotate the layer and its mask back into the region of src that they cover, and copy through the mask
-            forward[0, 2] -= region.X;
-            forward[1, 2] -= region.Y;
-            using var regionLayer = new Mat();
-            using var regionMask = new Mat();
-            CvInvoke.WarpAffine(layer, regionLayer, forward, region.Size, Inter.Linear, Warp.Default,
-                BorderType.Replicate);
-            CvInvoke.WarpAffine(layerMask, regionMask, forward, region.Size);
-
-            using var srcRegion = new Mat(src, region);
-            regionLayer.CopyTo(srcRegion, regionMask);
+            DrawRotatedLayer(
+                src,
+                org,
+                layerOrg,
+                layerSize,
+                angle,
+                color,
+                (target, drawColor) =>
+                    target.PutTextExtended(
+                        text,
+                        layerOrg,
+                        fontFace,
+                        fontScale,
+                        drawColor,
+                        thickness,
+                        lineGapOffset,
+                        lineType,
+                        bottomLeftOrigin,
+                        lineAlignment
+                    )
+            );
         }
 
         #endregion
@@ -3511,12 +4199,17 @@ public static partial class EmguCvExtensions
         /// <param name="elementShape">The shape of the structuring element used for morphological operations.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A new matrix containing the skeletonized image.</returns>
-        public Mat Skeletonize(Size ksize = default, MorphShapes elementShape = MorphShapes.Rectangle,
-            CancellationToken cancellationToken = default)
+        public Mat Skeletonize(
+            Size ksize = default,
+            MorphShapes elementShape = MorphShapes.Rectangle,
+            CancellationToken cancellationToken = default
+        )
         {
-            if (ksize.Width <= 0 || ksize.Height <= 0) ksize = new Size(3, 3);
+            if (ksize.Width <= 0 || ksize.Height <= 0)
+                ksize = new Size(3, 3);
             var skeleton = src.NewZeros();
-            if (src.IsAllZero) return skeleton;
+            if (src.IsAllZero)
+                return skeleton;
 
             using var kernel = CvInvoke.GetStructuringElement(elementShape, ksize, AnchorCenter);
             using var temp = new Mat();
@@ -3529,12 +4222,29 @@ public static partial class EmguCvExtensions
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    CvInvoke.Erode(current, eroded, kernel, AnchorCenter, 1, BorderType.Reflect101, default);
-                    CvInvoke.Dilate(eroded, temp, kernel, AnchorCenter, 1, BorderType.Reflect101, default);
+                    CvInvoke.Erode(
+                        current,
+                        eroded,
+                        kernel,
+                        AnchorCenter,
+                        1,
+                        BorderType.Reflect101,
+                        default
+                    );
+                    CvInvoke.Dilate(
+                        eroded,
+                        temp,
+                        kernel,
+                        AnchorCenter,
+                        1,
+                        BorderType.Reflect101,
+                        default
+                    );
                     CvInvoke.Subtract(current, temp, temp);
                     CvInvoke.BitwiseOr(skeleton, temp, skeleton);
 
-                    if (eroded.IsAllZero) break;
+                    if (eroded.IsAllZero)
+                        break;
 
                     (current, eroded) = (eroded, current);
                 }
@@ -3553,7 +4263,6 @@ public static partial class EmguCvExtensions
             }
         }
 
-
         /// <summary>
         /// Performs morphological skeletonization asynchronously, offloading the iterative work to a background thread.
         /// </summary>
@@ -3561,10 +4270,16 @@ public static partial class EmguCvExtensions
         /// <param name="elementShape">The shape of the structuring element used for morphological operations.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is a new matrix containing the skeletonized image.</returns>
-        public Task<Mat> SkeletonizeAsync(Size ksize = default, MorphShapes elementShape = MorphShapes.Rectangle,
-            CancellationToken cancellationToken = default)
+        public Task<Mat> SkeletonizeAsync(
+            Size ksize = default,
+            MorphShapes elementShape = MorphShapes.Rectangle,
+            CancellationToken cancellationToken = default
+        )
         {
-            return Task.Run(() => src.Skeletonize(ksize, elementShape, cancellationToken), cancellationToken);
+            return Task.Run(
+                () => src.Skeletonize(ksize, elementShape, cancellationToken),
+                cancellationToken
+            );
         }
 
         /// <summary>
@@ -3573,8 +4288,10 @@ public static partial class EmguCvExtensions
         /// <returns>A tuple containing the minimum value, maximum value, and their respective locations.</returns>
         public (double Min, double Max, Point MinLocation, Point MaxLocation) GetMinMax()
         {
-            double min = 0, max = 0;
-            Point minLoc = default, maxLoc = default;
+            double min = 0,
+                max = 0;
+            Point minLoc = default,
+                maxLoc = default;
             CvInvoke.MinMaxLoc(src, ref min, ref max, ref minLoc, ref maxLoc);
             return (min, max, minLoc, maxLoc);
         }
@@ -3602,8 +4319,11 @@ public static partial class EmguCvExtensions
         {
             ArgumentOutOfRangeException.ThrowIfNegative(index);
             if (index >= src.NumberOfChannels)
-                throw new ArgumentOutOfRangeException(nameof(index), index,
-                    $"Index must be less than the number of channels ({src.NumberOfChannels}).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(index),
+                    index,
+                    $"Index must be less than the number of channels ({src.NumberOfChannels})."
+                );
             var dst = new Mat();
             CvInvoke.ExtractChannel(src, dst, index);
             return dst;
@@ -3622,7 +4342,7 @@ public static partial class EmguCvExtensions
                 Height = src.Height,
                 RowBytes = src.Step, // The real row pitch, which is bigger than the row data for non-continuous Mats (e.g. ROIs)
                 BytesPerPixel = src.ElementSize,
-                IsContiguous = src.IsContinuous
+                IsContiguous = src.IsContinuous,
             };
         }
 

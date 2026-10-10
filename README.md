@@ -17,13 +17,13 @@ drawing helpers.
 - **ROI utilities** - `Roi`, `SafeRoi`, `ConstrainRoi`, and `RoiFromCenter` for bounded region-of-interest cropping with
   configurable empty-ROI behavior
 - **Image transforms** – Rotate with adjusted bounds, letterbox creation, crop-by-bounds, and shrink-to-fit resizing
-  that reports whether the image changed
+  that reports whether the image changed, perspective crops, reusable destinations, and coordinate mapping
 - **Stream copy helpers** - `CopyTo(Stream)` and `CopyToAsync(Stream, CancellationToken)` copy continuous matrices in
   one writing and non-continuous matrices row by row without including row padding
 - **Mat compression** - Pluggable compressors (PNG, Deflate, GZip, ZLib, Brotli, Zstd) with `CMat` for memory-efficient
   compressed image storage. `CMat.Compress` is thread-safe — concurrent calls are serialized automatically
 - **Contour hierarchies** - Structured `EmguContour`, `EmguContours`, and `EmguContourFamily` wrappers for OpenCV
-  contour trees using hierarchy links
+  contour trees using hierarchy links, plus area-filtered convex quadrilateral detection
 - **Drawing helpers** - Polygon geometry, multi-line text rendering with alignment, SVG path generation, and predefined
   colors
 - **Disposal infrastructure** - `DisposableObject`, `LeaveOpenDisposableObject`, and `GCSafeHandle` for thread-safe
@@ -33,6 +33,22 @@ drawing helpers.
 
 - [.NET 10](https://dotnet.microsoft.com/download) or later
 - [Emgu.CV](https://www.nuget.org/packages/Emgu.CV) Latest
+
+## OpenCV 5 migration notes
+
+The projects use Emgu.CV 5.0.0.6584. See the [OpenCV 4 to 5 migration guide](https://github.com/opencv/opencv/wiki/OpenCV-4-to-5-migration).
+
+- Affine and rotation helpers use `Mat` instead of the removed Emgu `Matrix<T>` type.
+  OpenCV 5's revised warping improves accuracy and can improve performance without changing these helpers' APIs;
+  pixel-exact output can differ from OpenCV 4.
+- `DepthType.ByteCount` includes half and bfloat16, bool, uint32, uint64, and int64 storage.
+  These sizes also support the library's raw memory and compression paths; image codecs still impose their own depth limits.
+- `Emgu.CV.FontFace` overloads for `PutTextExtended`, `GetTextSizeExtended`, and `PutTextRotated` enable
+  Unicode and custom fonts, with wrapping and text-block alignment. Existing overloads use `HersheyFonts`; legacy text appearance and measurements can change.
+- Nearest-neighbor resize follows updated rounding rules, so old pixel baselines may need review.
+  Vector-backed matrices can be genuinely 1D: use `Total` for element counts rather than assuming an Nx1 layout.
+- The Windows native runtime packages currently produce NU1701 metadata warnings. The test project keeps these
+  visible without treating them as errors; Windows x64 runtime behavior is covered by the test suite.
 
 ## Installation
 
@@ -89,6 +105,119 @@ ReadOnlyMemory2D<byte> readOnlyRoi = source.GetReadOnlyMemory2D<byte>(
     new Rectangle(10, 10, 40, 40));
 byte first = readOnlyRoi.Span[0, 0];
 ```
+
+### Unicode Text and Custom Fonts
+
+Fonts are caller-owned and reusable. Font sizes are in pixels; `weight: 0` uses the font's current weight.
+Use an embedded font (`"sans"`, `"italic"`, or `"uni"`) or pass a `.ttf`/`.otf` path to `FontFace`.
+Available glyphs depend on the selected font.
+
+```csharp
+using var font = new Emgu.CV.FontFace("uni");
+using var image = EmguCvExtensions.InitMat(new Size(640, 480), channels: 3);
+var white = new MCvScalar(255, 255, 255);
+
+var size = EmguCvExtensions.GetTextSizeExtended(
+    "Inspeção concluída\n你好", font, 28, wrapWidth: 300);
+image.PutTextExtended("Inspeção concluída\n你好", new Point(20, 60), font, 28, white,
+    wrapWidth: 300);
+image.PutTextRotated("Etiqueta", new Point(320, 240), font, 28, white,
+    lineAlignment: PutTextLineAlignment.Center, angle: 30);
+
+// Returns the largest fitting size, or zero if the minimum size cannot fit.
+int chosenSize = image.PutTextInRectangle("Inspeção concluída",
+    new Rectangle(20, 300, 300, 100), font, white, maximumFontSize: 48);
+```
+
+The origin is the first line's baseline. Center and right alignment anchor the **whole text block** at `org.X`,
+including wrapped lines. `wrapWidth: 0` disables wrapping. `PutTextInRectangle` fits and clips text inside a
+rectangle wholly contained in the image, preserving pixels outside it. The existing Hershey-font APIs are retained.
+
+### Perspective Cropping
+
+Provide a strictly convex quadrilateral in **top-left, top-right, bottom-right, bottom-left** order.
+The returned image is caller-owned; the source image is preserved.
+
+```csharp
+PointF[] corners = [new(40, 30), new(300, 50), new(320, 230), new(20, 210)];
+using var rectified = image.CreatePerspectiveCrop(corners, new Size(280, 200));
+
+// Without an explicit size, use the longer opposing edges, rounded up, plus one pixel.
+using var inferred = image.CreatePerspectiveCrop(corners);
+```
+
+Corner coordinates describe pixel centers. Explicit output dimensions must each be at least two pixels.
+Corners outside the source are permitted; optional `borderType` and `borderValue` control the outside samples.
+Self-crossing, concave, repeated, collinear, and non-finite corners are rejected.
+
+#### Ordering, Buffer Reuse, and Coordinate Mapping
+
+```csharp
+PointF[] unordered = [new(320, 230), new(40, 30), new(20, 210), new(300, 50)];
+var ordered = EmguCvExtensions.OrderPerspectiveCorners(unordered);
+var cropSize = EmguCvExtensions.GetPerspectiveCropSize(ordered);
+
+using var destination = new Mat();
+image.PerspectiveCrop(destination, ordered, cropSize);
+// Reuses destination storage when dimensions and type match; overlapping buffers are handled safely.
+image.PerspectiveCrop(destination, ordered, cropSize);
+
+using var forward = EmguCvExtensions.CreatePerspectiveTransform(ordered, cropSize);
+using var inverse = EmguCvExtensions.CreatePerspectiveTransform(ordered, cropSize, inverse: true);
+var cropPoints = forward.MapPerspectivePoints(ordered);
+var sourcePoints = inverse.MapPerspectivePoints(cropPoints);
+
+// Crop a contour's minimum-area rotated rectangle directly.
+var rotatedRectangle = new RotatedRect(new PointF(200, 150), new SizeF(120, 80), 25);
+using var rectangleCrop = image.CreatePerspectiveCrop(rotatedRectangle);
+```
+
+Ordering uses clockwise image coordinates, starting at the smallest `X + Y`; ties use the smaller `Y`, then `X`.
+This convention also determines the horizontal axis for rotated rectangles, including diamond shapes. Inputs are
+preserved. Transform matrices are caller-owned; mapping rejects non-finite coordinates and points at infinity.
+
+#### Quadrilateral Detection
+
+```csharp
+using var binary = EmguCvExtensions.InitMat(new Size(640, 480));
+CvInvoke.Rectangle(binary, new Rectangle(50, 50, 300, 200), new MCvScalar(255), -1);
+var candidates = binary.FindQuadrilaterals(minimumArea: 1000, approximationEpsilon: 0.02);
+if (candidates.Length > 0)
+{
+    using var largest = image.CreatePerspectiveCrop(candidates[0]);
+}
+```
+
+Pass a nonempty single-channel `Cv8U` binary image; threshold or otherwise segment your image first.
+Candidates are convex four-corner contour approximations, ordered and sorted by decreasing polygon area.
+`minimumArea` and `maximumArea` are inclusive filters; `approximationEpsilon` is a fraction of contour perimeter.
+External contours are used by default; `retrievalMode` can include nested contours. The source is preserved,
+and results are managed arrays requiring no disposal. This finds geometric candidates rather than identifying documents.
+
+### Boolean Masks
+
+```csharp
+using var all = EmguCvExtensions.CreateBooleanMask(image.Size, value: true);
+using var selectedBytes = binary.ToByteMask();
+using var selected = selectedBytes.ToBooleanMask();
+using var intersection = all.MaskAnd(selected);
+using var union = all.MaskOr(selected);
+using var exclusive = all.MaskXor(selected);
+using var inverseMask = selected.MaskNot();
+
+using var output = EmguCvExtensions.InitMat(image.Size, channels: image.NumberOfChannels, depthType: image.Depth);
+image.CopyTo(output, intersection);
+
+// For contours or codecs that require 8-bit masks:
+using var byteMask = intersection.ToByteMask();
+// Row-major bool input is also supported:
+using var smallMask = EmguCvExtensions.CreateBooleanMask(new bool[] { true, false, false, true }, new Size(2, 2));
+```
+
+Logical operations accept nonempty single-channel `CvBool` or `Cv8U` masks, including non-continuous ROI views.
+Every nonzero input means true. Binary operations require matching dimensions; results are caller-owned `CvBool`
+images containing only `0` and `1`. `ToByteMask` produces `0` and `255`. Inputs are preserved, and logical negation
+keeps canonical boolean values rather than flipping all storage bits.
 
 ### Safe ROI Cropping
 
