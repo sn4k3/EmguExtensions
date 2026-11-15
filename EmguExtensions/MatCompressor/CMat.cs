@@ -1,26 +1,26 @@
 /*
-*   MIT License
-*
-*   Copyright (c) 2026 Tiago Conceição
-*
-*   Permission is hereby granted, free of charge, to any person obtaining a copy
-*   of this software and associated documentation files (the "Software"), to deal
-*   in the Software without restriction, including without limitation the rights
-*   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-*   copies of the Software, and to permit persons to whom the Software is
-*   furnished to do so, subject to the following conditions:
-*
-*   The above copyright notice and this permission notice shall be included in all
-*   copies or substantial portions of the Software.
-*
-*   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-*   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-*   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-*   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-*   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-*   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-*   SOFTWARE.
-*/
+ *   MIT License
+ *
+ *   Copyright (c) 2026 Tiago Conceição
+ *
+ *   Permission is hereby granted, free of charge, to any person obtaining a copy
+ *   of this software and associated documentation files (the "Software"), to deal
+ *   in the Software without restriction, including without limitation the rights
+ *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *   copies of the Software, and to permit persons to whom the Software is
+ *   furnished to do so, subject to the following conditions:
+ *
+ *   The above copyright notice and this permission notice shall be included in all
+ *   copies or substantial portions of the Software.
+ *
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   SOFTWARE.
+ */
 
 using System.Drawing;
 using System.IO.Compression;
@@ -41,11 +41,28 @@ namespace EmguExtensions;
 /// </remarks>
 public class CMat : IEquatable<CMat>
 {
+    #region Formatters
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        var state = GetState();
+        var size = new Size(state.Width, state.Height);
+        var uncompressedLength = state.UncompressedLength;
+        var compressedLength = state.Bytes.Length;
+        var ratio = ComputeCompressionRatio(uncompressedLength, compressedLength);
+        var percentage = ComputeCompressionPercentage(uncompressedLength, compressedLength);
+        return $"{nameof(Decompressor)}: {state.Decompressor} @ {state.CompressionLevel}, {nameof(Size)}: {size}, {nameof(UncompressedLength)}: {uncompressedLength}, {nameof(CompressedLength)}: {compressedLength}, {nameof(IsCompressed)}: {state.IsCompressed}, {nameof(CompressionRatio)}: {ratio}x, {nameof(CompressionPercentage)}: {percentage}%";
+    }
+
+    #endregion
+
     #region Members
 
     private readonly ReaderWriterLockSlim _rwLock = new();
     private ulong? _hash;
     private byte[] _compressedBytes = [];
+    private int? _detachedLength;
     private bool _isInitialized;
     private bool _isCompressed;
     private int _thresholdToCompress = 512;
@@ -72,7 +89,8 @@ public class CMat : IEquatable<CMat>
         int Channels,
         Rectangle Roi,
         MatCompressor Decompressor,
-        CompressionLevel CompressionLevel
+        CompressionLevel CompressionLevel,
+        int? DetachedLength
     )
     {
         public int ElementSize => Depth.ByteCount * Channels;
@@ -287,12 +305,7 @@ public class CMat : IEquatable<CMat>
     /// <param name="height">The height of the Mat.</param>
     /// <param name="depth">The depth type of the Mat.</param>
     /// <param name="channels">The number of channels.</param>
-    public CMat(
-        int width = 0,
-        int height = 0,
-        DepthType depth = DepthType.Cv8U,
-        int channels = 1
-    )
+    public CMat(int width = 0, int height = 0, DepthType depth = DepthType.Cv8U, int channels = 1)
     {
         _width = width;
         _height = height;
@@ -424,7 +437,7 @@ public class CMat : IEquatable<CMat>
         )
             return 0;
         return MathF.Round(
-            100 - (compressedLength * 100f / uncompressedLength),
+            100 - compressedLength * 100f / uncompressedLength,
             2,
             MidpointRounding.AwayFromZero
         );
@@ -481,7 +494,8 @@ public class CMat : IEquatable<CMat>
                 _channels,
                 _roi,
                 _decompressor,
-                _compressionLevel
+                _compressionLevel,
+                _detachedLength
             );
         }
         finally
@@ -522,6 +536,7 @@ public class CMat : IEquatable<CMat>
     private void SetBytesInternal(byte[] value)
     {
         _compressedBytes = value;
+        _detachedLength = null;
         _hash = null;
         _isInitialized = true;
         _isCompressed = value.Length != 0;
@@ -532,7 +547,7 @@ public class CMat : IEquatable<CMat>
     /// </summary>
     private void ClearBytesInternal()
     {
-        if (_compressedBytes.Length == 0)
+        if (_compressedBytes.Length == 0 && !_detachedLength.HasValue)
             return;
         SetBytesInternal([]);
         _roi = Rectangle.Empty;
@@ -559,6 +574,10 @@ public class CMat : IEquatable<CMat>
         _rwLock.EnterWriteLock();
         try
         {
+            if (reEncodeWithNewCompressor && _detachedLength.HasValue)
+                throw new InvalidOperationException(
+                    "Attach the compressed buffer before re-encoding it."
+                );
             var willReEncode =
                 reEncodeWithNewCompressor
                 && _compressedBytes.Length != 0
@@ -771,6 +790,91 @@ public class CMat : IEquatable<CMat>
     }
 
     /// <summary>
+    /// Releases the resident buffer without changing its metadata or content hash.
+    /// </summary>
+    /// <remarks>
+    /// The returned array is not copied and must be treated as read-only, including when shared by clones.
+    /// Restore it with <see cref="AttachCompressedBytes"/> before decompression or re-encoding.
+    /// <see cref="CompressedLength"/> and <see cref="IsEmpty"/> describe the resident buffer while detached.
+    /// Callers must synchronize a detach/store/attach sequence with other mutations.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The buffer is already detached.</exception>
+    public byte[] DetachCompressedBytes()
+    {
+        _rwLock.EnterWriteLock();
+        try
+        {
+            if (_detachedLength.HasValue)
+                throw new InvalidOperationException("The compressed buffer is already detached.");
+            return DetachBytesInternal();
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Detaches the buffer only if it is still the exact <paramref name="expected"/> array.
+    /// </summary>
+    /// <remarks>Has the same ownership and synchronization requirements as <see cref="DetachCompressedBytes"/>.</remarks>
+    /// <returns>False if the buffer was replaced or is already detached.</returns>
+    public bool TryDetachCompressedBytes(byte[] expected)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        _rwLock.EnterWriteLock();
+        try
+        {
+            if (_detachedLength.HasValue || !ReferenceEquals(_compressedBytes, expected))
+                return false;
+            DetachBytesInternal();
+            return true;
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
+    }
+
+    // Caller must hold the write lock, so the cached hash always belongs to the detached bytes.
+    private byte[] DetachBytesInternal()
+    {
+        var bytes = _compressedBytes;
+        _hash ??= XxHash3.HashToUInt64(bytes);
+        _detachedLength = bytes.Length;
+        _compressedBytes = [];
+        return bytes;
+    }
+
+    /// <summary>
+    /// Restores a previously detached buffer without changing ROI, hash, or compression settings.
+    /// </summary>
+    /// <param name="bytes">The original bytes, or an identical copy loaded from storage. The array is not copied; do not modify it afterwards.</param>
+    /// <exception cref="InvalidOperationException">The buffer is not detached, or its content has since been replaced.</exception>
+    /// <exception cref="ArgumentException">The length or hash does not match the detached content.</exception>
+    public void AttachCompressedBytes(byte[] bytes)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        _rwLock.EnterWriteLock();
+        try
+        {
+            if (!_detachedLength.HasValue)
+                throw new InvalidOperationException("The compressed buffer is not detached.");
+            if (bytes.Length != _detachedLength.Value || XxHash3.HashToUInt64(bytes) != _hash)
+                throw new ArgumentException(
+                    "The buffer does not match the detached content.",
+                    nameof(bytes)
+                );
+            _compressedBytes = bytes;
+            _detachedLength = null;
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
     /// Sets the <see cref="CompressedBytes"/> to uncompressed bitmap data. Caller must hold the write lock.
     /// </summary>
     /// <param name="src">The source Mat whose raw data will be stored uncompressed.</param>
@@ -940,6 +1044,10 @@ public class CMat : IEquatable<CMat>
     /// </summary>
     private Mat RawDecompressInternal()
     {
+        if (_detachedLength.HasValue)
+            throw new InvalidOperationException(
+                "Attach the compressed buffer before decompressing it."
+            );
         var hasRoi = _roi.Width > 0 && _roi.Height > 0;
 
         if (_compressedBytes.Length == 0)
@@ -977,11 +1085,7 @@ public class CMat : IEquatable<CMat>
         if (expectedSize.Width <= 0 || expectedSize.Height <= 0)
             return; // The size is unknown (e.g. self-describing data set without a size)
 
-        if (
-            mat.Size != expectedSize
-            || mat.Depth != _depth
-            || mat.NumberOfChannels != _channels
-        )
+        if (mat.Size != expectedSize || mat.Depth != _depth || mat.NumberOfChannels != _channels)
         {
             throw new InvalidDataException(
                 $"The decompressed data ({mat.Width}x{mat.Height}, {mat.Depth}, {mat.NumberOfChannels} channel(s)) does not match the expected description ({expectedSize.Width}x{expectedSize.Height}, {_depth}, {_channels} channel(s))."
@@ -1008,6 +1112,10 @@ public class CMat : IEquatable<CMat>
         _rwLock.EnterReadLock();
         try
         {
+            if (_detachedLength.HasValue)
+                throw new InvalidOperationException(
+                    "Attach the compressed buffer before decompressing it."
+                );
             if (_compressedBytes.Length == 0)
                 return CreateMatZerosInternal();
 
@@ -1101,11 +1209,23 @@ public class CMat : IEquatable<CMat>
     #endregion
 
     #region Copy and Clone
+
     /// <summary>
     /// Copies the <see cref="CMat"/> to the <paramref name="dst"/>.
     /// </summary>
     /// <param name="dst"></param>
     public void CopyTo(CMat dst)
+    {
+        CopyTo(dst, false);
+    }
+
+    /// <summary>
+    /// Copies all state to <paramref name="dst"/>, optionally sharing the resident buffer.
+    /// </summary>
+    /// <param name="dst">The destination.</param>
+    /// <param name="shareCompressedBytes">True to share the read-only array; false to copy it.</param>
+    /// <remarks>Subsequent buffer replacements affect only the modified instance. Detached copies require their buffer to be restored separately.</remarks>
+    public void CopyTo(CMat dst, bool shareCompressedBytes)
     {
         ArgumentNullException.ThrowIfNull(dst);
         if (ReferenceEquals(this, dst))
@@ -1130,9 +1250,12 @@ public class CMat : IEquatable<CMat>
                 _channels,
                 _roi,
                 _decompressor,
-                _compressionLevel
+                _compressionLevel,
+                _detachedLength
             );
-            compressedBytes = _compressedBytes.ToArrayPerf(); // Deep copy, the clone must not share the buffer
+            compressedBytes = shareCompressedBytes
+                ? _compressedBytes
+                : _compressedBytes.ToArrayPerf();
             thresholdToCompress = _thresholdToCompress;
             compressor = _compressor;
         }
@@ -1145,6 +1268,7 @@ public class CMat : IEquatable<CMat>
         try
         {
             dst._compressedBytes = compressedBytes;
+            dst._detachedLength = state.DetachedLength;
             dst._hash = state.Hash;
             dst._isInitialized = state.IsInitialized;
             dst._isCompressed = state.IsCompressed;
@@ -1170,24 +1294,19 @@ public class CMat : IEquatable<CMat>
     /// <returns></returns>
     public CMat Clone()
     {
-        var clone = new CMat();
-        CopyTo(clone);
-        return clone;
+        return Clone(false);
     }
-    #endregion
 
-    #region Formatters
-
-    /// <inheritdoc />
-    public override string ToString()
+    /// <summary>
+    /// Creates a clone, optionally sharing the read-only compressed array instead of copying it.
+    /// </summary>
+    /// <param name="shareCompressedBytes">True to share the buffer; false to make a deep copy.</param>
+    /// <remarks>Buffer replacements on either instance do not affect the other.</remarks>
+    public CMat Clone(bool shareCompressedBytes)
     {
-        var state = GetState();
-        var size = new Size(state.Width, state.Height);
-        var uncompressedLength = state.UncompressedLength;
-        var compressedLength = state.Bytes.Length;
-        var ratio = ComputeCompressionRatio(uncompressedLength, compressedLength);
-        var percentage = ComputeCompressionPercentage(uncompressedLength, compressedLength);
-        return $"{nameof(Decompressor)}: {state.Decompressor} @ {state.CompressionLevel}, {nameof(Size)}: {size}, {nameof(UncompressedLength)}: {uncompressedLength}, {nameof(CompressedLength)}: {compressedLength}, {nameof(IsCompressed)}: {state.IsCompressed}, {nameof(CompressionRatio)}: {ratio}x, {nameof(CompressionPercentage)}: {percentage}%";
+        var clone = new CMat();
+        CopyTo(clone, shareCompressedBytes);
+        return clone;
     }
 
     #endregion
@@ -1213,9 +1332,14 @@ public class CMat : IEquatable<CMat>
             && left.Depth == right.Depth
             && left.Channels == right.Channels
             && left.Roi.Equals(right.Roi)
-            && left.Bytes.Length == right.Bytes.Length
+            && (left.DetachedLength ?? left.Bytes.Length)
+                == (right.DetachedLength ?? right.Bytes.Length)
             && (
-                ReferenceEquals(left.Bytes, right.Bytes)
+                (
+                    !left.DetachedLength.HasValue
+                    && !right.DetachedLength.HasValue
+                    && ReferenceEquals(left.Bytes, right.Bytes)
+                )
                 || ResolveHash(left) == other.ResolveHash(right)
             );
     }
@@ -1227,7 +1351,7 @@ public class CMat : IEquatable<CMat>
             return false;
         if (ReferenceEquals(this, obj))
             return true;
-        if (obj.GetType() != this.GetType())
+        if (obj.GetType() != GetType())
             return false;
         return Equals((CMat)obj);
     }

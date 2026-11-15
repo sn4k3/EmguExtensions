@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <!-- Project -->
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -16,7 +16,7 @@
     <Authors>Tiago Conceição</Authors>
     <Copyright>Copyright 2026-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
     <Description>A high-performance .NET library that extends Emgu.CV (OpenCV wrapper) with zero-copy Span/Memory Mat accessors, async stream copy helpers, ROI and perspective crop utilities, boolean mask operations, pluggable Mat compression (PNG, Deflate, GZip, ZLib, Brotli, Zstd), CMat for memory-efficient compressed image storage, structured contour hierarchy wrappers, and drawing helpers for polygons and Unicode multi-line text with custom fonts, wrapping, fitting, and rotation.</Description>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
 
     <!-- Package -->
     <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(MainProductName).ico</ApplicationIcon>

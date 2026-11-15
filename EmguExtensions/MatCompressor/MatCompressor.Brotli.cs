@@ -43,9 +43,7 @@ public sealed class MatCompressorBrotli : MatCompressor
     public static readonly MatCompressorBrotli Instance = new();
 
     /// <inheritdoc />
-    private MatCompressorBrotli()
-    {
-    }
+    private MatCompressorBrotli() { }
 
     /// <inheritdoc />
     public override string Name => "Brotli";
@@ -62,7 +60,11 @@ public sealed class MatCompressorBrotli : MatCompressor
             CompressionLevel.Fastest => 1,
             CompressionLevel.Optimal => QualityDefault,
             CompressionLevel.SmallestSize => QualityMax,
-            _ => throw new ArgumentOutOfRangeException(nameof(compressionLevel), compressionLevel, null)
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(compressionLevel),
+                compressionLevel,
+                null
+            ),
         };
     }
 
@@ -82,10 +84,7 @@ public sealed class MatCompressorBrotli : MatCompressor
             }
         }
 
-        var options = new BrotliCompressionOptions
-        {
-            Quality = compressionLevel
-        };
+        var options = new BrotliCompressionOptions { Quality = compressionLevel };
         using var buffer = CreateCompressionBuffer(src);
         using (var brotliStream = new BrotliStream(CreateCompressionStream(buffer), options))
         {
@@ -98,7 +97,8 @@ public sealed class MatCompressorBrotli : MatCompressor
     private static byte[] CompressContiguous(
         ReadOnlySpan<byte> source,
         int maxCompressedLength,
-        int compressionLevel)
+        int compressionLevel
+    )
     {
         Span<byte> buffer = stackalloc byte[maxCompressedLength];
         return CompressContiguous(source, buffer, compressionLevel);
@@ -107,20 +107,25 @@ public sealed class MatCompressorBrotli : MatCompressor
     private static byte[] CompressContiguous(
         ReadOnlySpan<byte> source,
         Span<byte> destination,
-        int compressionLevel)
+        int compressionLevel
+    )
     {
-        if (!BrotliEncoder.TryCompress(
+        if (
+            !BrotliEncoder.TryCompress(
                 source,
                 destination,
                 out var bytesWritten,
                 compressionLevel,
-                WindowBitsDefault))
+                WindowBitsDefault
+            )
+        )
         {
             throw new InvalidDataException("Failed to compress Brotli data.");
         }
 
         // Non-empty input always produces output; an empty result would be mistaken for "no data" by callers
-        if (bytesWritten == 0) throw new InvalidDataException("Brotli produced no output for a non-empty source.");
+        if (bytesWritten == 0)
+            throw new InvalidDataException("Brotli produced no output for a non-empty source.");
 
         var result = GC.AllocateUninitializedArray<byte>(bytesWritten);
         destination[..bytesWritten].CopyTo(result);
@@ -140,13 +145,19 @@ public sealed class MatCompressorBrotli : MatCompressor
 
             if (bytesWritten != dstSpan.Length)
             {
-                throw new InvalidDataException("Brotli decompressed size does not match destination Mat size.");
+                throw new InvalidDataException(
+                    "Brotli decompressed size does not match destination Mat size."
+                );
             }
         }
         else
         {
             using var compressedStream = new MemoryStream(compressedBytes, writable: false);
-            using var brotliStream = new BrotliStream(compressedStream, CompressionMode.Decompress, leaveOpen: true);
+            using var brotliStream = new BrotliStream(
+                compressedStream,
+                CompressionMode.Decompress,
+                leaveOpen: true
+            );
             for (var row = 0; row < dst.Height; row++)
             {
                 brotliStream.ReadExactly(dst.GetRowSpanOfBytes(row));

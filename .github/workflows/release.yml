@@ -9,45 +9,63 @@ on:
         default: true
         type: boolean
 
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
   extract_information:
     name: '🔍 Extract release information'
-    uses: sn4k3/Actions/.github/workflows/extract-csproj-information.yml@main
+    uses: sn4k3/Actions/.github/workflows/extract-csproj-information.yml@6bea0a76a0db58a39051c111eea0024ca5c0de55 # main
 
   nuget:
     name: 📦 Nuget - Publish package
     needs: extract_information
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: write
       packages: write
     steps:
       # 🛒 Checkout the repository (fetch-depth: 0 ensures tags and history are available)
       - name: 🛒 Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: ${{ !inputs.dry_run }}
 
-      # 🟣 Setup .NET with package restore caching
-      - name: 🟣 Setup .NET 10.0
-        uses: actions/setup-dotnet@v4
+      - name: Set up .NET 10 and 11
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/*.csproj'
+          dotnet-version: |
+            10.0.x
+            11.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-${{ runner.arch }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/NuGet.Config', '**/nuget.config', 'global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore EmguExtensions.slnx
 
       # 📦 Pack the projects into an isolated directory
       - name: 📦 Pack
-        run: dotnet pack --configuration Release --output ./nupkgs
+        run: dotnet pack EmguExtensions.slnx --configuration Release --no-restore --output ./nupkgs
 
       # 📤 Upload packages as workflow artifact (available for inspection in dry-run and release)
       - name: 📤 Upload NuGet packages as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nuget-packages-v${{ needs.extract_information.outputs.version }}
           path: ./nupkgs/*
@@ -62,11 +80,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+          if git show-ref --verify --quiet "refs/tags/$VERSION"; then
             echo "Tag $VERSION already exists, skipping."
           else
             git tag -a "$VERSION" -m "Release v$VERSION"
-            git push origin "$VERSION"
+            git push origin "refs/tags/$VERSION"
           fi
 
       # 🚀 Push to nuget.org
@@ -74,41 +92,45 @@ jobs:
         if: ${{ !inputs.dry_run }}
         env:
           NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
-        run: dotnet nuget push ./nupkgs/*.nupkg --source https://api.nuget.org/v3/index.json --api-key "$NUGET_TOKEN" --skip-duplicate
+        run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_TOKEN" --skip-duplicate
 
       # 🚀 Push to GitHub Packages
       - name: 🚀 Push GitHub Packages
         if: ${{ !inputs.dry_run }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: dotnet nuget push ./nupkgs/*.nupkg --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key "$GITHUB_TOKEN" --skip-duplicate
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: dotnet nuget push "./nupkgs/*.nupkg" --source "https://nuget.pkg.github.com/$REPOSITORY_OWNER/index.json" --api-key "$GITHUB_TOKEN" --skip-duplicate
 
       # 📝 Create GitHub release and attach packages
       - name: 📝 Create GitHub release
         if: ${{ !inputs.dry_run }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ needs.extract_information.outputs.version }}
           name: v${{ needs.extract_information.outputs.version }}
           body: ${{ needs.extract_information.outputs.changelog }}
           files: ./nupkgs/*
+          fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(needs.extract_information.outputs.version, '-alpha') || contains(needs.extract_information.outputs.version, '-beta') || contains(needs.extract_information.outputs.version, '-preview') || contains(needs.extract_information.outputs.version, '-rc') }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      # 📊 Output workflow execution summary
-      - name: 📊 Workflow summary
+      - name: Workflow summary
         if: always()
+        env:
+          VERSION: ${{ needs.extract_information.outputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            echo "### ⚠️ Dry Run Completed" >> $GITHUB_STEP_SUMMARY
-            echo "Packages were built and archived as an artifact for version **${{ needs.extract_information.outputs.version }}**." >> $GITHUB_STEP_SUMMARY
-            echo "No Git tags, GitHub releases, or package registries were updated." >> $GITHUB_STEP_SUMMARY
+          if [ "$JOB_STATUS" != "success" ]; then
+            echo "### Release workflow: $JOB_STATUS" >> "$GITHUB_STEP_SUMMARY"
+            echo "Version: **$VERSION**. Check the failed or cancelled steps; publishing may be incomplete." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$DRY_RUN" = "true" ]; then
+            echo "### Dry run completed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Packages for **$VERSION** were built and archived. No tags, releases, or package registries were updated." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "### 🚀 Release v${{ needs.extract_information.outputs.version }} Published!" >> $GITHUB_STEP_SUMMARY
-            echo "- **Git Tag:** \`${{ needs.extract_information.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **NuGet.org:** Published" >> $GITHUB_STEP_SUMMARY
-            echo "- **GitHub Packages:** Published" >> $GITHUB_STEP_SUMMARY
-            echo "- **GitHub Release:** Created with attached assets" >> $GITHUB_STEP_SUMMARY
+            echo "### Release v$VERSION published" >> "$GITHUB_STEP_SUMMARY"
+            echo "Packages were published to NuGet.org and GitHub Packages and attached to the GitHub release." >> "$GITHUB_STEP_SUMMARY"
           fi

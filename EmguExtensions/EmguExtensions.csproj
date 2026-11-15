@@ -7,14 +7,14 @@
   <ItemGroup>
     <PackageReference
       Include="Microsoft.SourceLink.GitHub"
-      Version="10.0.401"
+      Version="11.0.100"
       PrivateAssets="All"
     />
     <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
     <PackageReference Include="StageKit.Primitives" Version="0.4.1" />
-    <PackageReference Include="System.IO.Hashing" Version="10.0.12" />
-    <PackageReference Include="DotNext" Version="6.9.0" />
-    <PackageReference Include="DotNext.IO" Version="6.9.0" />
+    <PackageReference Include="System.IO.Hashing" Version="11.0.0" />
+    <PackageReference Include="DotNext" Version="6.12.1" />
+    <PackageReference Include="DotNext.IO" Version="6.12.1" />
     <PackageReference Include="Emgu.CV" Version="5.0.0.6584" />
   </ItemGroup>
 </Project>

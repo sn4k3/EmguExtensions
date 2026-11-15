@@ -1,3 +1,24 @@
+# v0.4.0 (15/11/2026)
+
+- `CMat`:
+  - Add `Clone(shareCompressedBytes)` and `CopyTo(dst, shareCompressedBytes)` overloads to share the read-only
+    compressed buffer, reducing memory use for snapshots and undo history. Existing overloads retain deep-copy behavior;
+    replacing or clearing either instance's buffer does not affect the other.
+  - Add `DetachCompressedBytes`, `TryDetachCompressedBytes(expected)` and `AttachCompressedBytes` for external storage
+    of buffers while preserving dimensions, depth, channels, ROI, initialization state, compression settings and hash.
+    Conditional detachment rejects stale buffers, and attachment validates the restored length and content hash.
+  - Preserve equality and hash codes while detached, including comparisons with resident buffers. Clones and copies
+    preserve detached state and require their buffers to be restored separately.
+  - Reject decompression and re-encoding until detached bytes are restored; clearing or replacing content discards the
+    detached state. `CompressedLength` and `IsEmpty` continue to describe the resident buffer.
+  - Add regression tests for shared-buffer isolation, compressed and raw ROI round trips, detached equality, invalid
+    attachment, empty buffers, clearing detached content and concurrent detachment.
+- Add .NET 11 support alongside .NET 10, targeting `net10.0` and `net11.0`.
+- Enable the `MatCompressorZstd` codec on .NET 11 using the built-in `ZstandardStream` and
+  `ZstandardCompressionOptions`. Support integer quality levels within the native library's limits and map
+  `CompressionLevel` presets to minimum quality (`NoCompression`), quality 1 (`Fastest`), default quality (`Optimal`)
+  and maximum quality (`SmallestSize`).
+
 # v0.3.0 (10/10/2026)
 
 - Upgrade Emgu.CV and native test runtimes to `5.0.0.6584` / OpenCV 5.
@@ -32,7 +53,8 @@
     not allocate it (everything except PNG), instead of silently returning an empty result
   - `PNG`: throw `InvalidDataException` on corrupt data (OpenCV did not report it) and decode into pre-allocated
     destinations (including ROIs) with size/type validation
-  - `None`: copy with a length check instead of Emgu's unchecked `SetTo(byte[])`, and support non-continuous destinations
+  - `None`: copy with a length check instead of Emgu's unchecked `SetTo(byte[])`, and support non-continuous
+    destinations
   - `Brotli`: never return an empty result for a non-empty source
   - Cache `Id`, drop redundant `async`/`await` wrappers and document the integer compression levels, the
     non-interruptible async work and the non-thread-safe `AvailableCompressors`
@@ -58,7 +80,8 @@
   - `CopyAreasSmallerThan`/`CopyAreasLargerThan` add islands nested inside holes to the area of their group
   - Document `Kernel3X3Rectangle` as a shared read-only instance
 - `DrawingExtensions.FactorColor` rounds instead of truncating; add `PointExtensions.FindLength(PointF, PointF)`
-- `BitmapInfo`/`Mat.GetBitmapInfo()`: `RowBytes` is now the real stride (`Mat.Step`), it was the row data size, which was
+- `BitmapInfo`/`Mat.GetBitmapInfo()`: `RowBytes` is now the real stride (`Mat.Step`), it was the row data size, which
+  was
   wrong for ROI Mats
 - `EmguExtensions.Avalonia`:
   - `ToBitmap`: convert straight into the locked bitmap memory through a `Mat` view, without an intermediate Mat, and
