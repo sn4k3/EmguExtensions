@@ -76,9 +76,9 @@ jobs:
       - name: Authenticate to NuGet.org with OIDC
         if: ${{ !inputs.dry_run }}
         id: nuget_login
-        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        uses: NuGet/login@v1
         with:
-          user: sn4k3
+          user: ${{ vars.NUGET_USER || 'sn4k3' }}
 
       # 🏷️ Create a Git tag
       - name: 🏷️ Create Git tag
