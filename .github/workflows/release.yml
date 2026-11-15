@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write
     steps:
       # 🛒 Checkout the repository (fetch-depth: 0 ensures tags and history are available)
       - name: 🛒 Checkout
@@ -72,6 +73,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Authenticate to NuGet.org with OIDC
+        if: ${{ !inputs.dry_run }}
+        id: nuget_login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: sn4k3
+
       # 🏷️ Create a Git tag
       - name: 🏷️ Create Git tag
         if: ${{ !inputs.dry_run }}
@@ -91,8 +99,8 @@ jobs:
       - name: 🚀 Push nuget.org
         if: ${{ !inputs.dry_run }}
         env:
-          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
-        run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_TOKEN" --skip-duplicate
+          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
 
       # 🚀 Push to GitHub Packages
       - name: 🚀 Push GitHub Packages
