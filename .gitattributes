@@ -1,0 +1,4 @@
+# The release-note extractor runs on Linux and matches changelog headings with
+# an end-of-line anchor, so preserve LF endings in the repository.
+CHANGELOG.md text eol=lf
+*.sh text eol=lf
