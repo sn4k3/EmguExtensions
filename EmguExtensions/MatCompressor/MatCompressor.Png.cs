@@ -65,8 +65,18 @@ public sealed class MatCompressorPng : MatCompressor
     protected override bool AllocatesDestination => true;
 
     /// <inheritdoc />
+    /// <exception cref="NotSupportedException">The depth is not <see cref="DepthType.Cv8U"/> or
+    /// <see cref="DepthType.Cv16U"/>, or the channel count is not 1, 3 or 4. PNG cannot store those losslessly
+    /// (the encoder silently converts them), so <see cref="CMat"/> falls back to raw storage.</exception>
     protected override byte[] CompressCore(Mat src, int compressionLevel)
     {
+        if (src.Depth is not (DepthType.Cv8U or DepthType.Cv16U) || src.NumberOfChannels is not (1 or 3 or 4))
+        {
+            throw new NotSupportedException(
+                $"PNG cannot losslessly store {src.Depth} with {src.NumberOfChannels} channel(s), only Cv8U or Cv16U with 1, 3 or 4 channels."
+            );
+        }
+
         return src.GetPngBytes(compressionLevel);
     }
 

@@ -34,6 +34,40 @@ namespace EmguExtensions;
 
 public static partial class EmguCvExtensions
 {
+    /// <summary>
+    /// Computes the overlapping regions when a source of <paramref name="srcSize"/> is placed at
+    /// <paramref name="offset"/> on a destination of <paramref name="dstSize"/>. Uses 64-bit math so extreme offsets
+    /// (e.g. <see cref="int.MinValue"/>) cannot overflow into a valid placement.
+    /// </summary>
+    /// <returns><see langword="false"/> when the source does not overlap the destination.</returns>
+    private static bool TryGetPlacement(
+        Size srcSize,
+        Size dstSize,
+        Point offset,
+        out Rectangle srcRoi,
+        out Rectangle dstRoi
+    )
+    {
+        var srcX = Math.Max(0L, -(long)offset.X);
+        var srcY = Math.Max(0L, -(long)offset.Y);
+        var dstX = Math.Max(0L, offset.X);
+        var dstY = Math.Max(0L, offset.Y);
+
+        var width = Math.Min(srcSize.Width - srcX, dstSize.Width - dstX);
+        var height = Math.Min(srcSize.Height - srcY, dstSize.Height - dstY);
+
+        if (width <= 0 || height <= 0)
+        {
+            srcRoi = dstRoi = Rectangle.Empty;
+            return false;
+        }
+
+        // All values are now within [0, size], so they fit in an int
+        srcRoi = new Rectangle((int)srcX, (int)srcY, (int)width, (int)height);
+        dstRoi = new Rectangle((int)dstX, (int)dstY, (int)width, (int)height);
+        return true;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int ResolveElementRange(
         int byteLength,

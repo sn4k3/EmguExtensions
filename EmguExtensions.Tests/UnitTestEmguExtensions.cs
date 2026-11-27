@@ -59,6 +59,8 @@ public class UnitTestEmguExtensions
     [InlineData(DepthType.Cv32U, 4)]
     [InlineData(DepthType.Cv64U, 8)]
     [InlineData(DepthType.Cv64S, 8)]
+    [InlineData(DepthType.Cv8FE4M3FN, 1)]
+    [InlineData(DepthType.Cv8FE4M3FNUZ, 1)]
     public void ByteCount_KnownDepthType_ReturnsCorrectByteCount(DepthType depth, byte expected)
     {
         Assert.Equal(expected, depth.ByteCount);
@@ -178,6 +180,66 @@ public class UnitTestEmguExtensions
 
     #endregion
 
+    #region GetTiffBytes
+
+    // Deterministic, partially compressible pattern so compression levels produce different sizes.
+    private static Mat CreatePatternMat(DepthType depth, int channels = 1)
+    {
+        var mat = new Mat(new Size(128, 128), depth, channels);
+        var bytes = mat.GetSpanOfBytes();
+        uint state = 12345;
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            state = state * 1664525 + 1013904223;
+            bytes[i] = (byte)((i / 64 % 7) + ((state >> 24) & 3));
+        }
+        return mat;
+    }
+
+    [Theory]
+    [InlineData(TiffCompression.None, DepthType.Cv8U)]
+    [InlineData(TiffCompression.Lzw, DepthType.Cv16U)]
+    [InlineData(TiffCompression.AdobeDeflate, DepthType.Cv32F)]
+    [InlineData(TiffCompression.Deflate, DepthType.Cv8U)]
+    [InlineData(TiffCompression.PackBits, DepthType.Cv16S)]
+    [InlineData(TiffCompression.Lzma, DepthType.Cv32S)]
+    [InlineData(TiffCompression.Zstd, DepthType.Cv64F)]
+    public void GetTiffBytes_LosslessScheme_RoundTripsByteExact(TiffCompression compression, DepthType depth)
+    {
+        using var mat = CreatePatternMat(depth, 3);
+
+        var bytes = mat.GetTiffBytes(compression);
+        using var decoded = new Mat();
+        CvInvoke.Imdecode(bytes, ImreadModes.Unchanged, decoded);
+
+        Assert.Equal(mat.Size, decoded.Size);
+        Assert.Equal(mat.Depth, decoded.Depth);
+        Assert.Equal(mat.NumberOfChannels, decoded.NumberOfChannels);
+        Assert.Equal(mat.GetReadOnlySpan<byte>().ToArray(), decoded.GetReadOnlySpan<byte>().ToArray());
+    }
+
+    [Fact]
+    public void GetTiffBytes_DeflateLevel_IsApplied()
+    {
+        using var mat = CreatePatternMat(DepthType.Cv8U);
+
+        var fastest = mat.GetTiffBytes(TiffCompression.Deflate, 1);
+        var smallest = mat.GetTiffBytes(TiffCompression.Deflate, 9);
+
+        Assert.True(smallest.Length < fastest.Length, $"Level 9 ({smallest.Length}) should be < level 1 ({fastest.Length})");
+    }
+
+    [Fact]
+    public void GetTiffBytes_InvalidArguments_Throw()
+    {
+        using var mat = CreatePatternMat(DepthType.Cv8U);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetTiffBytes((TiffCompression)12345));
+        Assert.Throws<ArgumentOutOfRangeException>(() => mat.GetTiffBytes(TiffCompression.Deflate, -2));
+    }
+
+    #endregion
+
     #region CopyTo(Stream) / CopyToAsync(Stream)
 
     [Fact]
@@ -276,6 +338,118 @@ public class UnitTestEmguExtensions
         Assert.Equal(255, dst.GetByte(0, 0));
         // Pixel at dst(35, 35) should be black (outside the 30×30 overlap)
         Assert.Equal(0, dst.GetByte(35, 35));
+    }
+
+    [Fact]
+    public void CopyTo_OffsetIntMinValue_NothingCopied()
+    {
+        using var src = CreateSolidMat(10, 10, 255);
+        using var dst = CreateSolidMat(10, 10, 0);
+
+        src.CopyTo(dst, new Point(int.MinValue, int.MinValue));
+
+        Assert.All(dst.ToArray(), b => Assert.Equal(0, b));
+    }
+
+    #endregion
+
+    #region AlphaCompositeTo
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void AlphaCompositeTo_OpaqueOverlayWithNegativeOffset_ClipsAndWritesInPlace(int backgroundChannels)
+    {
+        using var overlay = new Mat(new Size(20, 20), DepthType.Cv8U, 4);
+        overlay.SetTo(new MCvScalar(0, 0, 255, 255));
+        using var background = new Mat(new Size(30, 30), DepthType.Cv8U, backgroundChannels);
+        background.SetTo(new MCvScalar(255, 0, 0, 255));
+        var dataPointer = background.DataPointer;
+
+        overlay.AlphaCompositeTo(background, new Point(-5, -5));
+
+        Assert.Equal(dataPointer, background.DataPointer);
+        Assert.Equal(backgroundChannels, background.NumberOfChannels);
+        Assert.Equal([0, 0, 255], background.GetRawData(14, 14)[..3]); // inside the 15x15 overlap
+        Assert.Equal([255, 0, 0], background.GetRawData(15, 15)[..3]); // outside the overlap
+    }
+
+    [Fact]
+    public void AlphaCompositeTo_HalfTransparentOverlay_BlendsWithBackground()
+    {
+        using var overlay = new Mat(new Size(10, 10), DepthType.Cv8U, 4);
+        overlay.SetTo(new MCvScalar(0, 0, 255, 128));
+        using var background = new Mat(new Size(10, 10), DepthType.Cv8U, 3);
+        background.SetTo(new MCvScalar(255, 0, 0));
+
+        overlay.AlphaCompositeTo(background, Point.Empty);
+
+        var pixel = background.GetRawData(5, 5);
+        Assert.InRange(pixel[0], 120, 135);
+        Assert.InRange(pixel[2], 120, 135);
+    }
+
+    [Fact]
+    public void AlphaCompositeTo_OverlayOutsideBackground_LeavesBackgroundUntouched()
+    {
+        using var overlay = new Mat(new Size(10, 10), DepthType.Cv8U, 4);
+        overlay.SetTo(new MCvScalar(0, 0, 255, 255));
+        using var background = new Mat(new Size(10, 10), DepthType.Cv8U, 3);
+        background.SetTo(new MCvScalar(255, 0, 0));
+
+        overlay.AlphaCompositeTo(background, new Point(50, 50));
+
+        Assert.Equal([255, 0, 0], background.GetRawData(0, 0));
+    }
+
+    [Theory]
+    [InlineData(DepthType.Cv16U)]
+    [InlineData(DepthType.Cv32F)]
+    [InlineData(DepthType.Cv8FE4M3FN)]
+    public void AlphaCompositeTo_NonByteDepth_ThrowsArgumentException(DepthType depth)
+    {
+        using var overlay = new Mat(new Size(10, 10), depth, 4);
+        using var background = new Mat(new Size(10, 10), depth, 3);
+
+        Assert.Throws<ArgumentException>(() => overlay.AlphaCompositeTo(background, Point.Empty));
+    }
+
+    [Fact]
+    public void AlphaCompositeTo_OffsetIntMinValue_LeavesBackgroundUntouched()
+    {
+        using var overlay = new Mat(new Size(10, 10), DepthType.Cv8U, 4);
+        overlay.SetTo(new MCvScalar(0, 0, 255, 255));
+        using var background = new Mat(new Size(10, 10), DepthType.Cv8U, 3);
+        background.SetTo(new MCvScalar(255, 0, 0));
+
+        overlay.AlphaCompositeTo(background, new Point(int.MinValue, int.MinValue));
+
+        Assert.Equal([255, 0, 0], background.GetRawData(0, 0));
+    }
+
+    [Fact]
+    public void AlphaCompositeTo_OverlappingViewsOfSameMat_UsesOriginalOverlayPixels()
+    {
+        // BGRA canvas: left half opaque red, right half opaque blue; composite the left half onto a shifted view.
+        using var canvas = new Mat(new Size(20, 10), DepthType.Cv8U, 4);
+        canvas.SetTo(new MCvScalar(255, 0, 0, 255));
+        using (var left = new Mat(canvas, new Rectangle(0, 0, 10, 10)))
+            left.SetTo(new MCvScalar(0, 0, 255, 255));
+        using var overlay = new Mat(canvas, new Rectangle(0, 0, 10, 10));
+
+        overlay.AlphaCompositeTo(canvas, new Point(5, 0));
+
+        Assert.Equal([0, 0, 255, 255], canvas.GetRawData(0, 14));
+        Assert.Equal([255, 0, 0, 255], canvas.GetRawData(0, 15));
+    }
+
+    [Fact]
+    public void AlphaCompositeTo_OverlayWithoutAlpha_Throws()
+    {
+        using var overlay = new Mat(new Size(10, 10), DepthType.Cv8U, 3);
+        using var background = new Mat(new Size(10, 10), DepthType.Cv8U, 3);
+
+        Assert.Throws<ArgumentException>(() => overlay.AlphaCompositeTo(background, Point.Empty));
     }
 
     #endregion

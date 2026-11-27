@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.6" />
+    <PackageReference Include="Avalonia" Version="12.2.0" />
     <!-- Used directly (Span2D), keep it in sync with the version of EmguExtensions -->
     <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
   </ItemGroup>

@@ -49,7 +49,12 @@ public static partial class EmguCvExtensions
         public byte ByteCount =>
             src switch
             {
-                DepthType.Default or DepthType.Cv8U or DepthType.Cv8S or DepthType.CvBool => 1,
+                DepthType.Default
+                or DepthType.Cv8U
+                or DepthType.Cv8S
+                or DepthType.CvBool
+                or DepthType.Cv8FE4M3FN
+                or DepthType.Cv8FE4M3FNUZ => 1,
                 DepthType.Cv16U or DepthType.Cv16S or DepthType.Cv16F or DepthType.Cv16BF => 2,
                 DepthType.Cv32S or DepthType.Cv32U or DepthType.Cv32F => 4,
                 DepthType.Cv64F or DepthType.Cv64U or DepthType.Cv64S => 8,
@@ -192,6 +197,37 @@ public static partial class EmguCvExtensions
                 ),
             };
             return src.GetPngBytes(pngCompressionLevel);
+        }
+
+        /// <summary>
+        /// Encodes the source image as a TIFF and returns the resulting byte array.
+        /// </summary>
+        /// <remarks>Unlike PNG, TIFF can store every common depth (including 32-bit float) losslessly with the
+        /// lossless schemes. The available schemes depend on the codecs built into the OpenCV runtime; an unavailable
+        /// one falls back to LZW (OpenCV 5.1+).</remarks>
+        /// <param name="compression">The compression scheme.</param>
+        /// <param name="compressionLevel">The compression level, or -1 for the scheme default. Only used by
+        /// <see cref="TiffCompression.Deflate"/>/<see cref="TiffCompression.AdobeDeflate"/> (1-9),
+        /// <see cref="TiffCompression.Lzma"/> (0-9), <see cref="TiffCompression.Zstd"/> (1-22) and
+        /// <see cref="TiffCompression.Webp"/> (1-100).</param>
+        /// <returns>A byte array containing the TIFF-encoded image data.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="compression"/> is not a defined value or
+        /// <paramref name="compressionLevel"/> is less than -1.</exception>
+        public byte[] GetTiffBytes(TiffCompression compression = TiffCompression.Lzw, int compressionLevel = -1)
+        {
+            if (!Enum.IsDefined(compression))
+                throw new ArgumentOutOfRangeException(nameof(compression), compression, null);
+            ArgumentOutOfRangeException.ThrowIfLessThan(compressionLevel, -1);
+
+            var compressionFlag = new KeyValuePair<ImwriteFlags, int>(ImwriteFlags.TiffCompression, (int)compression);
+            return compressionLevel == -1
+                ? CvInvoke.Imencode(".tiff", src, compressionFlag)
+                : CvInvoke.Imencode(
+                    ".tiff",
+                    src,
+                    compressionFlag,
+                    new KeyValuePair<ImwriteFlags, int>(ImwriteFlags.TiffCompressionLevel, compressionLevel)
+                );
         }
 
         /// <summary>
@@ -719,20 +755,8 @@ public static partial class EmguCvExtensions
         {
             ArgumentNullException.ThrowIfNull(destination);
 
-            // Calculate the overlapping region between source and destination
-            var srcX = Math.Max(0, -offset.X);
-            var srcY = Math.Max(0, -offset.Y);
-            var dstX = Math.Max(0, offset.X);
-            var dstY = Math.Max(0, offset.Y);
-
-            var width = Math.Min(src.Width - srcX, destination.Width - dstX);
-            var height = Math.Min(src.Height - srcY, destination.Height - dstY);
-
-            if (width <= 0 || height <= 0)
+            if (!TryGetPlacement(src.Size, destination.Size, offset, out var srcRoi, out var dstRoi))
                 return;
-
-            var srcRoi = new Rectangle(srcX, srcY, width, height);
-            var dstRoi = new Rectangle(dstX, dstY, width, height);
 
             using var srcRegion = new Mat(src, srcRoi);
             using var dstRegion = new Mat(destination, dstRoi);
@@ -746,6 +770,51 @@ public static partial class EmguCvExtensions
             {
                 srcRegion.CopyTo(dstRegion);
             }
+        }
+
+        /// <summary>
+        /// Composites the current matrix (the overlay, with an alpha channel) onto a background matrix at the
+        /// specified offset using a Porter-Duff operator, writing the result back into the background.
+        /// </summary>
+        /// <remarks>The overlay is clipped to fit within the background bounds when placed at the given offset;
+        /// pixels outside the overlay are left untouched. Backed by <see cref="CvInvoke.AlphaComposite"/>
+        /// (OpenCV 5.1+).</remarks>
+        /// <param name="background">The 8-bit background matrix, with 3 (BGR) or 4 (BGRA) channels. It is modified in
+        /// place.</param>
+        /// <param name="offset">The top-left position in the background where the overlay will be placed.</param>
+        /// <param name="operation">The compositing operator.</param>
+        /// <param name="premultiplied"><see langword="true"/> if the colors of the overlay (and of the background, if
+        /// it has an alpha channel) are already premultiplied by alpha; <see langword="false"/> for straight alpha.
+        /// </param>
+        /// <exception cref="ArgumentException">The overlay is not 8-bit with 4 channels, or the background is not
+        /// 8-bit with 3 or 4 channels.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="operation"/> is not a defined value.</exception>
+        public void AlphaCompositeTo(
+            Mat background,
+            Point offset,
+            AlphaCompositeOperation operation = AlphaCompositeOperation.Over,
+            bool premultiplied = false
+        )
+        {
+            ArgumentNullException.ThrowIfNull(src);
+            ArgumentNullException.ThrowIfNull(background);
+            if (!Enum.IsDefined(operation))
+                throw new ArgumentOutOfRangeException(nameof(operation), operation, null);
+            if (src.IsEmpty || background.IsEmpty)
+                return;
+            if (src.Depth != DepthType.Cv8U || src.NumberOfChannels != 4)
+                throw new ArgumentException("The overlay must be 8-bit with 4 channels (BGRA).", nameof(src));
+            if (background.Depth != DepthType.Cv8U || background.NumberOfChannels is not (3 or 4))
+                throw new ArgumentException("The background must be 8-bit with 3 or 4 channels.", nameof(background));
+
+            if (!TryGetPlacement(src.Size, background.Size, offset, out var srcRoi, out var dstRoi))
+                return;
+
+            using var srcRegion = new Mat(src, srcRoi);
+            using var dstRegion = new Mat(background, dstRoi);
+            using var composite = new Mat();
+            CvInvoke.AlphaComposite(srcRegion, dstRegion, composite, operation, premultiplied);
+            composite.CopyTo(dstRegion);
         }
 
         /// <summary>

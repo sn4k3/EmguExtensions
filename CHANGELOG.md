@@ -1,3 +1,24 @@
+# v0.4.1 (27/11/2026)
+
+- Update Emgu.CV to 5.1.0 (OpenCV 5.1). Text rendering now uses HarfBuzz, improving complex scripts and ligatures in
+  the `FontFace` text helpers.
+- `DepthType.ByteCount` supports the new 8-bit float depths `Cv8FE4M3FN` and `Cv8FE4M3FNUZ`, so `CMat` can store
+  matrices of these depths.
+- Add `Mat.AlphaCompositeTo(background, offset, operation, premultiplied)`: composites an 8-bit BGRA overlay onto an
+  8-bit 3 or 4 channel background at an offset using a Porter-Duff operator (`CvInvoke.AlphaComposite`), clipped to
+  the background bounds and written in place.
+- Add `Mat.GetMaskComponents(connectivity, minimumArea)`: connected regions of an 8-bit or boolean mask as managed
+  `MaskComponent` values (label, bounds, area, centroid), with no native objects to dispose.
+- Add `Mat.CreateOklabDistanceMask(color, tolerance)`: boolean mask of the pixels perceptually close to a color, using
+  the Euclidean distance in the Oklab color space (OpenCV 5.1). Accepts BGR/BGRA `Cv8U`, `Cv16U` and `Cv32F` images.
+- Add `Mat.GetTiffBytes(compression, compressionLevel)` and the `TiffCompression` enum: TIFF encoding, lossless for
+  every common depth (unlike PNG), with selectable scheme (LZW, Deflate, LZMA, Zstd, ...) and level (OpenCV 5.1).
+- Fix `MatCompressorPng` silently converting depths other than `Cv8U`/`Cv16U` (and channel counts other than 1, 3 or
+  4) to 8-bit, which made a `CMat` using it unreadable (`InvalidDataException` on decompress). It now throws
+  `NotSupportedException` for those, and `CMat` stores them raw.
+- Fix `Mat.CopyTo(destination, offset, mask)` copying to the origin when an offset coordinate is `int.MinValue`.
+- Bump dependencies
+
 # v0.4.0 (15/11/2026)
 
 - `CMat`:

@@ -41,6 +41,66 @@ public class UnitTestCMat
         Assert.Equal(expected.ToArray(), actual.ToArray());
     }
 
+    #region Depth round trips
+
+    // PNG only stores 8U/16U losslessly; any other depth must still round trip byte-exactly (raw or another codec).
+    [Theory]
+    [InlineData(DepthType.Cv8U)]
+    [InlineData(DepthType.Cv8S)]
+    [InlineData(DepthType.Cv16U)]
+    [InlineData(DepthType.Cv16S)]
+    [InlineData(DepthType.Cv32S)]
+    [InlineData(DepthType.Cv32F)]
+    [InlineData(DepthType.Cv64F)]
+    [InlineData(DepthType.Cv16F)]
+    [InlineData(DepthType.Cv16BF)]
+    [InlineData(DepthType.CvBool)]
+    [InlineData(DepthType.Cv32U)]
+    [InlineData(DepthType.Cv64U)]
+    [InlineData(DepthType.Cv64S)]
+    [InlineData(DepthType.Cv8FE4M3FN)]
+    [InlineData(DepthType.Cv8FE4M3FNUZ)]
+    public void Compress_Png_AnyDepth_RoundTripsByteExact(DepthType depth)
+    {
+        using var mat = new Mat(new Size(64, 64), depth, 1);
+        var bytes = mat.GetSpanOfBytes();
+        var mask = depth == DepthType.CvBool ? 1 : 0x3F; // Valid bool values / no FP8 NaN encodings
+        for (var i = 0; i < bytes.Length; i++)
+            bytes[i] = (byte)((i / 16) & mask);
+
+        var cmat = new CMat(mat, MatCompressorPng.Instance);
+        using var decompressed = cmat.Decompress();
+
+        AssertMatsEqual(mat, decompressed);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void Compress_Png_UnsupportedChannelCount_RoundTripsByteExact(int channels)
+    {
+        using var mat = new Mat(new Size(64, 64), DepthType.Cv8U, channels);
+        var bytes = mat.GetSpanOfBytes();
+        for (var i = 0; i < bytes.Length; i++)
+            bytes[i] = (byte)(i / 16);
+
+        var cmat = new CMat(mat, MatCompressorPng.Instance);
+        using var decompressed = cmat.Decompress();
+
+        AssertMatsEqual(mat, decompressed);
+    }
+
+    [Fact]
+    public void PngCompressor_UnsupportedDepth_ThrowsNotSupportedException()
+    {
+        using var mat = new Mat(new Size(8, 8), DepthType.Cv32F, 1);
+        mat.SetTo(new Emgu.CV.Structure.MCvScalar(1));
+
+        Assert.Throws<NotSupportedException>(() => MatCompressorPng.Instance.Compress(mat, CompressionLevel.Optimal));
+    }
+
+    #endregion
+
     #region Constructors
 
     [Fact]

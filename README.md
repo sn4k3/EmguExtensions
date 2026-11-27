@@ -20,6 +20,11 @@ drawing helpers.
   that reports whether the image changed, perspective crops, reusable destinations, and coordinate mapping
 - **Stream copy helpers** - `CopyTo(Stream)` and `CopyToAsync(Stream, CancellationToken)` copy continuous matrices in
   one writing and non-continuous matrices row by row without including row padding
+- **Alpha compositing** - `AlphaCompositeTo(background, offset, operation)` places a BGRA overlay onto a BGR/BGRA
+  background with a Porter-Duff operator, clipped to the background bounds and written in place
+- **Mask analysis** - `GetMaskComponents` returns connected regions (bounds, area, centroid) as managed values, and
+  `CreateOklabDistanceMask` selects pixels perceptually close to a color
+- **Image encoding** - `GetPngBytes` and `GetTiffBytes` (lossless for every common depth, selectable scheme and level)
 - **Mat compression** - Pluggable compressors (PNG, Deflate, GZip, ZLib, Brotli, Zstd) with `CMat` for memory-efficient
   compressed image storage. `CMat.Compress` is thread-safe — concurrent calls are serialized automatically
 - **Contour hierarchies** - Structured `EmguContour`, `EmguContours`, and `EmguContourFamily` wrappers for OpenCV
@@ -110,7 +115,9 @@ byte first = readOnlyRoi.Span[0, 0];
 
 Fonts are caller-owned and reusable. Font sizes are in pixels; `weight: 0` uses the font's current weight.
 Use an embedded font (`"sans"`, `"italic"`, or `"uni"`) or pass a `.ttf`/`.otf` path to `FontFace`.
-Available glyphs depend on the selected font.
+Available glyphs depend on the selected font. Text is shaped with HarfBuzz (OpenCV 5.1+), so complex scripts and
+ligatures render correctly. The official Emgu.CV runtimes embed `"italic"` and `"uni"`; with a custom OpenCV build
+that omits them, register the font files once with `FontFace.SetBuiltinFont("uni", path)` before creating fonts.
 
 ```csharp
 using var font = new Emgu.CV.FontFace("uni");

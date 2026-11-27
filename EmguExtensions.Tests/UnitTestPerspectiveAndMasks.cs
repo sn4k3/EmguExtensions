@@ -247,6 +247,148 @@ public class UnitTestPerspectiveAndMasks
             Assert.Equal((byte)b, rightBytes[i]);
         }
     }
+    #region GetMaskComponents
+
+    [Theory]
+    [InlineData(DepthType.Cv8U)]
+    [InlineData(DepthType.CvBool)]
+    public void GetMaskComponents_ReturnsBoundsAreaAndCentroidPerRegion(DepthType depth)
+    {
+        using var mask = new Mat(new Size(20, 10), depth, 1);
+        mask.SetTo(new MCvScalar(0));
+        using (var a = new Mat(mask, new Rectangle(1, 1, 4, 2))) a.SetTo(new MCvScalar(1));
+        using (var b = new Mat(mask, new Rectangle(10, 4, 3, 3))) b.SetTo(new MCvScalar(1));
+        using (var dot = new Mat(mask, new Rectangle(18, 8, 1, 1))) dot.SetTo(new MCvScalar(1));
+
+        var components = mask.GetMaskComponents();
+
+        Assert.Equal(3, components.Length);
+        Assert.Equal(new Rectangle(1, 1, 4, 2), components[0].Bounds);
+        Assert.Equal(8, components[0].Area);
+        AssertPointClose(new PointF(2.5f, 1.5f), components[0].Centroid);
+        Assert.Equal(new Rectangle(10, 4, 3, 3), components[1].Bounds);
+        Assert.Equal(9, components[1].Area);
+        AssertPointClose(new PointF(11, 5), components[1].Centroid);
+        Assert.Equal(1, components[2].Area);
+        Assert.Equal([1, 2, 3], components.Select(c => c.Label));
+    }
+
+    [Fact]
+    public void GetMaskComponents_MinimumArea_OmitsSmallRegions()
+    {
+        using var mask = new Mat(new Size(20, 10), DepthType.Cv8U, 1);
+        mask.SetTo(new MCvScalar(0));
+        using (var big = new Mat(mask, new Rectangle(1, 1, 5, 5))) big.SetTo(new MCvScalar(255));
+        using (var dot = new Mat(mask, new Rectangle(15, 5, 1, 1))) dot.SetTo(new MCvScalar(255));
+
+        var component = Assert.Single(mask.GetMaskComponents(minimumArea: 2));
+
+        Assert.Equal(25, component.Area);
+    }
+
+    [Fact]
+    public void GetMaskComponents_DiagonalPixels_JoinOnlyWhenEightConnected()
+    {
+        using var mask = new Mat(new Size(4, 4), DepthType.Cv8U, 1);
+        mask.SetTo(new MCvScalar(0));
+        using (var p0 = new Mat(mask, new Rectangle(0, 0, 1, 1))) p0.SetTo(new MCvScalar(255));
+        using (var p1 = new Mat(mask, new Rectangle(1, 1, 1, 1))) p1.SetTo(new MCvScalar(255));
+
+        Assert.Single(mask.GetMaskComponents(LineType.EightConnected));
+        Assert.Equal(2, mask.GetMaskComponents(LineType.FourConnected).Length);
+    }
+
+    [Fact]
+    public void GetMaskComponents_RoiView_UsesViewCoordinates()
+    {
+        using var mask = new Mat(new Size(20, 20), DepthType.Cv8U, 1);
+        mask.SetTo(new MCvScalar(0));
+        using (var block = new Mat(mask, new Rectangle(12, 12, 3, 3))) block.SetTo(new MCvScalar(255));
+        using var view = new Mat(mask, new Rectangle(10, 10, 10, 10));
+
+        var component = Assert.Single(view.GetMaskComponents());
+
+        Assert.Equal(new Rectangle(2, 2, 3, 3), component.Bounds);
+    }
+
+    [Fact]
+    public void GetMaskComponents_EmptyMask_ReturnsEmpty()
+    {
+        using var mask = EmguExtensions.EmguCvExtensions.CreateBooleanMask(new Size(5, 5));
+
+        Assert.Empty(mask.GetMaskComponents());
+    }
+
+    [Fact]
+    public void GetMaskComponents_InvalidConnectivity_Throws()
+    {
+        using var mask = EmguExtensions.EmguCvExtensions.CreateBooleanMask(new Size(5, 5));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => mask.GetMaskComponents(LineType.AntiAlias));
+    }
+
+    #endregion
+
+    #region CreateOklabDistanceMask
+
+    // 3 columns: pure red, slightly darker red, blue.
+    private static Mat CreateColorStrip(DepthType depth, int channels, double max)
+    {
+        var mat = new Mat(new Size(3, 1), depth, channels);
+        using (var c0 = new Mat(mat, new Rectangle(0, 0, 1, 1))) c0.SetTo(new MCvScalar(0, 0, max, max));
+        using (var c1 = new Mat(mat, new Rectangle(1, 0, 1, 1))) c1.SetTo(new MCvScalar(0, 0, max * 250 / 255, max));
+        using (var c2 = new Mat(mat, new Rectangle(2, 0, 1, 1))) c2.SetTo(new MCvScalar(max, 0, 0, max));
+        return mat;
+    }
+
+    [Theory]
+    [InlineData(DepthType.Cv8U, 3, 255.0)]
+    [InlineData(DepthType.Cv8U, 4, 255.0)]
+    [InlineData(DepthType.Cv16U, 3, 65535.0)]
+    [InlineData(DepthType.Cv32F, 3, 1.0)]
+    public void CreateOklabDistanceMask_SelectsPerceptuallyCloseColors(DepthType depth, int channels, double max)
+    {
+        using var image = CreateColorStrip(depth, channels, max);
+        var red = new MCvScalar(0, 0, max);
+
+        using var loose = image.CreateOklabDistanceMask(red, 0.05);
+        using var exact = image.CreateOklabDistanceMask(red, 0.001);
+
+        Assert.Equal(DepthType.CvBool, loose.Depth);
+        Assert.Equal([1, 1, 0], loose.GetReadOnlySpan<byte>().ToArray());
+        Assert.Equal([1, 0, 0], exact.GetReadOnlySpan<byte>().ToArray());
+    }
+
+    // The documented tolerance scale assumes float Oklab with lightness in [0, 1]
+    [Fact]
+    public void Oklab_FloatWhite_HasUnitLightnessAndNeutralChroma()
+    {
+        using var white = new Mat(1, 1, DepthType.Cv32F, 3);
+        white.SetTo(new MCvScalar(1, 1, 1));
+        using var lab = new Mat();
+        CvInvoke.CvtColor(white, lab, ColorConversion.Bgr2Oklab);
+
+        var values = lab.GetReadOnlySpan<float>();
+        Assert.InRange(values[0], 0.99f, 1.01f);
+        Assert.InRange(values[1], -0.01f, 0.01f);
+        Assert.InRange(values[2], -0.01f, 0.01f);
+    }
+
+    [Fact]
+    public void CreateOklabDistanceMask_InvalidInput_Throws()
+    {
+        using var gray = new Mat(new Size(2, 2), DepthType.Cv8U, 1);
+        using var signed = new Mat(new Size(2, 2), DepthType.Cv8S, 3);
+        using var bgr = new Mat(new Size(2, 2), DepthType.Cv8U, 3);
+
+        Assert.Throws<ArgumentException>(() => gray.CreateOklabDistanceMask(default, 0.1));
+        Assert.Throws<ArgumentException>(() => signed.CreateOklabDistanceMask(default, 0.1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => bgr.CreateOklabDistanceMask(default, -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => bgr.CreateOklabDistanceMask(default, double.NaN));
+    }
+
+    #endregion
+
     private static void AssertPointClose(PointF expected, PointF actual)
     {
         const float tolerance = 0.0001f;
