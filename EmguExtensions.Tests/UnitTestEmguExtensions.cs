@@ -203,7 +203,8 @@ public class UnitTestEmguExtensions
     [InlineData(TiffCompression.Deflate, DepthType.Cv8U)]
     [InlineData(TiffCompression.PackBits, DepthType.Cv16S)]
     [InlineData(TiffCompression.Lzma, DepthType.Cv32S)]
-    [InlineData(TiffCompression.Zstd, DepthType.Cv64F)]
+    [InlineData(TiffCompression.Zstd, DepthType.Cv64F)] // LZMA/Zstd may fall back to LZW, still lossless
+    [InlineData(TiffCompression.Deflate, DepthType.Cv64U)]
     public void GetTiffBytes_LosslessScheme_RoundTripsByteExact(TiffCompression compression, DepthType depth)
     {
         using var mat = CreatePatternMat(depth, 3);

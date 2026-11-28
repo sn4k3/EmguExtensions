@@ -202,9 +202,11 @@ public static partial class EmguCvExtensions
         /// <summary>
         /// Encodes the source image as a TIFF and returns the resulting byte array.
         /// </summary>
-        /// <remarks>Unlike PNG, TIFF can store every common depth (including 32-bit float) losslessly with the
-        /// lossless schemes. The available schemes depend on the codecs built into the OpenCV runtime; an unavailable
-        /// one falls back to LZW (OpenCV 5.1+).</remarks>
+        /// <remarks>Unlike PNG, the lossless schemes store 8/16/32/64-bit signed and unsigned integer and 32/64-bit
+        /// float depths exactly, with 1, 3 or 4 channels. Other depths (<see cref="DepthType.Cv16F"/>,
+        /// <see cref="DepthType.Cv16BF"/>, <see cref="DepthType.CvBool"/>, FP8) are silently converted to 8-bit, and
+        /// other channel counts throw. The available schemes depend on the codecs built into the OpenCV runtime; an
+        /// unavailable one (e.g. LZMA and Zstd in the official Windows runtime) falls back to LZW.</remarks>
         /// <param name="compression">The compression scheme.</param>
         /// <param name="compressionLevel">The compression level, or -1 for the scheme default. Only used by
         /// <see cref="TiffCompression.Deflate"/>/<see cref="TiffCompression.AdobeDeflate"/> (1-9),

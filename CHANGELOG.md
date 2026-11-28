@@ -1,3 +1,14 @@
+# v0.4.2 (/11/2026)
+
+- Add `MatCompressorTiff` (registered in `MatCompressor.AvailableCompressors`): lossless TIFF codec via OpenCV with
+  Adobe Deflate (levels 1-9, 0 stores uncompressed, `Optimal` = 3). Best for continuous-tone data (photos, depth
+  maps, float fields), where its predictor compresses far better than the stream compressors. Unlike PNG it compresses signed and 32/64-bit integer and `Cv32F`
+  matrices. Depths it cannot store losslessly (`Cv16F`, `Cv16BF`, `CvBool`, FP8) and channel counts other than 1, 3 or 4 throw `NotSupportedException`, so `CMat` stores them raw. OpenCV writes `Cv64F` uncompressed.
+- `GetTiffBytes`: correct the documentation, it is lossless only for integer and 32/64-bit float depths with 1, 3 or 4
+  channels (`Cv16F`, `Cv16BF`, `CvBool` and FP8 are converted to 8-bit), and the LZMA/Zstd schemes are not built into
+  the official Windows runtime (they fall back to LZW).
+- `MatCompressorPng` and `MatCompressorTiff` share the image decoding and validation logic.
+
 # v0.4.1 (27/11/2026)
 
 - Update Emgu.CV to 5.1.0 (OpenCV 5.1). Text rendering now uses HarfBuzz, improving complex scripts and ligatures in

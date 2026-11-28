@@ -24,8 +24,9 @@ drawing helpers.
   background with a Porter-Duff operator, clipped to the background bounds and written in place
 - **Mask analysis** - `GetMaskComponents` returns connected regions (bounds, area, centroid) as managed values, and
   `CreateOklabDistanceMask` selects pixels perceptually close to a color
-- **Image encoding** - `GetPngBytes` and `GetTiffBytes` (lossless for every common depth, selectable scheme and level)
-- **Mat compression** - Pluggable compressors (PNG, Deflate, GZip, ZLib, Brotli, Zstd) with `CMat` for memory-efficient
+- **Image encoding** - `GetPngBytes` and `GetTiffBytes` (lossless for integer and 32/64-bit float depths, selectable scheme and
+  level)
+- **Mat compression** - Pluggable compressors (PNG, TIFF, Deflate, GZip, ZLib, Brotli, Zstd) with `CMat` for memory-efficient
   compressed image storage. `CMat.Compress` is thread-safe — concurrent calls are serialized automatically
 - **Contour hierarchies** - Structured `EmguContour`, `EmguContours`, and `EmguContourFamily` wrappers for OpenCV
   contour trees using hierarchy links, plus area-filtered convex quadrilateral detection
@@ -357,15 +358,19 @@ mat.PutTextExtended("Line 1\nLine 2\nLine 3",
 
 ## Available Compressors
 
-| Compressor | Class                  | Description                      |
-|------------|------------------------|----------------------------------|
-| None       | `MatCompressorNone`    | No compression (raw bytes)       |
-| PNG        | `MatCompressorPng`     | PNG image encoding via OpenCV    |
-| Deflate    | `MatCompressorDeflate` | Deflate stream compression       |
-| GZip       | `MatCompressorGZip`    | GZip stream compression          |
-| ZLib       | `MatCompressorZLib`    | ZLib stream compression          |
-| Brotli     | `MatCompressorBrotli`  | Brotli stream compression        |
-| Zstd       | `MatCompressorZstd`    | Zstandard compression (.NET 11+) |
+| Compressor | Class                  | Description                                                        |
+|------------|------------------------|--------------------------------------------------------------------|
+| None       | `MatCompressorNone`    | No compression (raw bytes)                                         |
+| PNG        | `MatCompressorPng`     | PNG image encoding via OpenCV (`Cv8U`/`Cv16U`)                     |
+| TIFF       | `MatCompressorTiff`    | TIFF Deflate encoding via OpenCV (integer and `Cv32F` depths)      |
+| Deflate    | `MatCompressorDeflate` | Deflate stream compression                                         |
+| GZip       | `MatCompressorGZip`    | GZip stream compression                                            |
+| ZLib       | `MatCompressorZLib`    | ZLib stream compression                                            |
+| Brotli     | `MatCompressorBrotli`  | Brotli stream compression                                          |
+| Zstd       | `MatCompressorZstd`    | Zstandard compression (.NET 11+)                                   |
+
+The image codecs (PNG, TIFF) only accept 1, 3 or 4 channels and the depths listed; anything else makes `CMat` store the
+matrix raw.
 
 All compressors are singletons accessed via `Instance` (e.g., `MatCompressorBrotli.Instance`). Public `CompressAsync`
 and `DecompressAsync` methods call overrideable `CompressCoreAsync` and `DecompressCoreAsync` methods, so custom

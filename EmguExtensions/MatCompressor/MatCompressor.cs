@@ -54,7 +54,7 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// Gets a collection of available material compressors supported by the system.
     /// </summary>
     /// <remarks>
-    /// The collection includes built-in compressors such as None, PNG, Deflate, GZip, ZLib, and Brotli.<br/>
+    /// The collection includes built-in compressors such as None, PNG, TIFF, Deflate, GZip, ZLib, and Brotli.<br/>
     /// The collection is not thread-safe: register custom compressors once during application startup,
     /// before any <see cref="GetCompressorById"/> or <see cref="GetCompressorByName"/> lookups run concurrently.
     /// </remarks>
@@ -62,6 +62,7 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     [
         MatCompressorNone.Instance,
         MatCompressorPng.Instance,
+        MatCompressorTiff.Instance,
         MatCompressorDeflate.Instance,
         MatCompressorGZip.Instance,
         MatCompressorZLib.Instance,
@@ -468,6 +469,47 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
         return AvailableCompressors.FirstOrDefault(compressor =>
             compressor.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
         );
+    }
+
+    /// <summary>
+    /// Decodes image-codec bytes (e.g. PNG, TIFF) with <see cref="CvInvoke.Imdecode(byte[], Emgu.CV.CvEnum.ImreadModes, Mat)"/>
+    /// into <paramref name="dst"/>. An empty destination is allocated by the decoder; a pre-allocated one (it can be a
+    /// ROI of a bigger Mat) must match the decoded size, depth and channels exactly.
+    /// </summary>
+    /// <param name="compressedBytes">The encoded image.</param>
+    /// <param name="dst">The destination <see cref="Mat"/>.</param>
+    /// <param name="format">The format name, used in error messages.</param>
+    /// <exception cref="InvalidDataException">The data cannot be decoded or does not match the destination.</exception>
+    private protected static void DecodeImage(byte[] compressedBytes, Mat dst, string format)
+    {
+        // Imdecode does not throw on corrupt or truncated data, it just returns an empty result, and it leaves a
+        // pre-allocated destination untouched: so the result is only trusted after checking it
+        if (dst.IsEmpty)
+        {
+            CvInvoke.Imdecode(compressedBytes, Emgu.CV.CvEnum.ImreadModes.Unchanged, dst);
+            if (dst.IsEmpty)
+                throw new InvalidDataException($"Failed to decode {format} data.");
+            return;
+        }
+
+        // Pre-allocated destination: decode aside and copy into it
+        using var decoded = new Mat();
+        CvInvoke.Imdecode(compressedBytes, Emgu.CV.CvEnum.ImreadModes.Unchanged, decoded);
+        if (decoded.IsEmpty)
+            throw new InvalidDataException($"Failed to decode {format} data.");
+
+        if (
+            decoded.Size != dst.Size
+            || decoded.Depth != dst.Depth
+            || decoded.NumberOfChannels != dst.NumberOfChannels
+        )
+        {
+            throw new InvalidDataException(
+                $"The decoded {format} ({decoded.Width}x{decoded.Height}, {decoded.Depth}, {decoded.NumberOfChannels} channel(s)) does not match the destination Mat ({dst.Width}x{dst.Height}, {dst.Depth}, {dst.NumberOfChannels} channel(s))."
+            );
+        }
+
+        decoded.CopyTo(dst);
     }
 
     /// <summary>

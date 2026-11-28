@@ -48,10 +48,10 @@ public enum TiffCompression
     /// <summary>Deflate (zlib) with the legacy tag, lossless. Supports levels 1-9.</summary>
     Deflate = 32946,
 
-    /// <summary>LZMA2, lossless. Supports levels 0-9.</summary>
+    /// <summary>LZMA2, lossless. Supports levels 0-9. Not built into every runtime (falls back to LZW).</summary>
     Lzma = 34925,
 
-    /// <summary>Zstandard, lossless. Supports levels 1-22.</summary>
+    /// <summary>Zstandard, lossless. Supports levels 1-22. Not built into every runtime (falls back to LZW).</summary>
     Zstd = 50000,
 
     /// <summary>WebP, lossy. The level is the quality, 1-100. Only 8-bit images with 1, 3 or 4 channels.</summary>

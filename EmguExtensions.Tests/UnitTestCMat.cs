@@ -43,48 +43,56 @@ public class UnitTestCMat
 
     #region Depth round trips
 
-    // PNG only stores 8U/16U losslessly; any other depth must still round trip byte-exactly (raw or another codec).
-    [Theory]
-    [InlineData(DepthType.Cv8U)]
-    [InlineData(DepthType.Cv8S)]
-    [InlineData(DepthType.Cv16U)]
-    [InlineData(DepthType.Cv16S)]
-    [InlineData(DepthType.Cv32S)]
-    [InlineData(DepthType.Cv32F)]
-    [InlineData(DepthType.Cv64F)]
-    [InlineData(DepthType.Cv16F)]
-    [InlineData(DepthType.Cv16BF)]
-    [InlineData(DepthType.CvBool)]
-    [InlineData(DepthType.Cv32U)]
-    [InlineData(DepthType.Cv64U)]
-    [InlineData(DepthType.Cv64S)]
-    [InlineData(DepthType.Cv8FE4M3FN)]
-    [InlineData(DepthType.Cv8FE4M3FNUZ)]
-    public void Compress_Png_AnyDepth_RoundTripsByteExact(DepthType depth)
+    // Compressible pattern with valid values for every depth (canonical bools, no FP8 NaN encodings).
+    private static Mat CreatePatternMat(DepthType depth, int channels = 1)
     {
-        using var mat = new Mat(new Size(64, 64), depth, 1);
+        var mat = new Mat(new Size(64, 64), depth, channels);
         var bytes = mat.GetSpanOfBytes();
-        var mask = depth == DepthType.CvBool ? 1 : 0x3F; // Valid bool values / no FP8 NaN encodings
+        var mask = depth == DepthType.CvBool ? 1 : 0x3F;
         for (var i = 0; i < bytes.Length; i++)
             bytes[i] = (byte)((i / 16) & mask);
+        return mat;
+    }
 
-        var cmat = new CMat(mat, MatCompressorPng.Instance);
+    private static readonly DepthType[] AllDepths =
+    [
+        DepthType.Cv8U, DepthType.Cv8S, DepthType.Cv16U, DepthType.Cv16S, DepthType.Cv32S, DepthType.Cv32F,
+        DepthType.Cv64F, DepthType.Cv16F, DepthType.Cv16BF, DepthType.CvBool, DepthType.Cv32U, DepthType.Cv64U,
+        DepthType.Cv64S, DepthType.Cv8FE4M3FN, DepthType.Cv8FE4M3FNUZ,
+    ];
+
+    public static TheoryData<string, DepthType> ImageCodecDepths()
+    {
+        var data = new TheoryData<string, DepthType>();
+        foreach (var codec in new[] { "PNG", "TIFF" })
+        foreach (var depth in AllDepths)
+            data.Add(codec, depth);
+        return data;
+    }
+
+    // Image codecs only store some depths losslessly; every depth must still round trip byte-exactly (raw fallback).
+    [Theory]
+    [MemberData(nameof(ImageCodecDepths))]
+    public void Compress_ImageCodec_AnyDepth_RoundTripsByteExact(string codec, DepthType depth)
+    {
+        using var mat = CreatePatternMat(depth);
+
+        var cmat = new CMat(mat, MatCompressor.GetCompressorByName(codec));
         using var decompressed = cmat.Decompress();
 
         AssertMatsEqual(mat, decompressed);
     }
 
     [Theory]
-    [InlineData(2)]
-    [InlineData(5)]
-    public void Compress_Png_UnsupportedChannelCount_RoundTripsByteExact(int channels)
+    [InlineData("PNG", 2)]
+    [InlineData("PNG", 5)]
+    [InlineData("TIFF", 2)]
+    [InlineData("TIFF", 5)]
+    public void Compress_ImageCodec_UnsupportedChannelCount_RoundTripsByteExact(string codec, int channels)
     {
-        using var mat = new Mat(new Size(64, 64), DepthType.Cv8U, channels);
-        var bytes = mat.GetSpanOfBytes();
-        for (var i = 0; i < bytes.Length; i++)
-            bytes[i] = (byte)(i / 16);
+        using var mat = CreatePatternMat(DepthType.Cv8U, channels);
 
-        var cmat = new CMat(mat, MatCompressorPng.Instance);
+        var cmat = new CMat(mat, MatCompressor.GetCompressorByName(codec));
         using var decompressed = cmat.Decompress();
 
         AssertMatsEqual(mat, decompressed);
@@ -97,6 +105,60 @@ public class UnitTestCMat
         mat.SetTo(new Emgu.CV.Structure.MCvScalar(1));
 
         Assert.Throws<NotSupportedException>(() => MatCompressorPng.Instance.Compress(mat, CompressionLevel.Optimal));
+    }
+
+    [Theory]
+    [InlineData(DepthType.Cv16F)]
+    [InlineData(DepthType.Cv16BF)]
+    [InlineData(DepthType.CvBool)]
+    [InlineData(DepthType.Cv8FE4M3FN)]
+    public void TiffCompressor_UnsupportedDepth_ThrowsNotSupportedException(DepthType depth)
+    {
+        using var mat = CreatePatternMat(depth);
+
+        Assert.Throws<NotSupportedException>(() => MatCompressorTiff.Instance.Compress(mat, CompressionLevel.Optimal));
+    }
+
+    [Theory]
+    [InlineData(DepthType.Cv8S, 1)]
+    [InlineData(DepthType.Cv16S, 3)]
+    [InlineData(DepthType.Cv32S, 4)]
+    [InlineData(DepthType.Cv32U, 1)]
+    [InlineData(DepthType.Cv64U, 1)]
+    [InlineData(DepthType.Cv64S, 3)]
+    [InlineData(DepthType.Cv32F, 4)]
+    public void TiffCompressor_SupportedDepth_IsStoredCompressed(DepthType depth, int channels)
+    {
+        // Cv64F is excluded: OpenCV's TIFF encoder writes it uncompressed, so CMat stores it raw
+        using var mat = CreatePatternMat(depth, channels);
+
+        var cmat = new CMat(mat, MatCompressorTiff.Instance);
+        using var decompressed = cmat.Decompress();
+
+        Assert.Same(MatCompressorTiff.Instance, cmat.Decompressor);
+        Assert.True(cmat.CompressedLength < mat.ByteCountInt32);
+        AssertMatsEqual(mat, decompressed);
+    }
+
+    [Fact]
+    public void TiffCompressor_HigherLevel_ProducesSmallerOutput()
+    {
+        using var mat = CreatePatternMat(DepthType.Cv32F);
+
+        var stored = MatCompressorTiff.Instance.Compress(mat, CompressionLevel.NoCompression);
+        var smallest = MatCompressorTiff.Instance.Compress(mat, CompressionLevel.SmallestSize);
+
+        Assert.True(smallest.Length < stored.Length, $"Level 9 ({smallest.Length}) should be < level 0 ({stored.Length})");
+    }
+
+    [Fact]
+    public void TiffCompressor_DecompressIntoMismatchingDestination_ThrowsInvalidDataException()
+    {
+        using var mat = CreatePatternMat(DepthType.Cv32F);
+        var compressed = MatCompressorTiff.Instance.Compress(mat);
+        using var dst = new Mat(mat.Size, DepthType.Cv32S, 1);
+
+        Assert.Throws<InvalidDataException>(() => MatCompressorTiff.Instance.Decompress(compressed, dst));
     }
 
     #endregion
