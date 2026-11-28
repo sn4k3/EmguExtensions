@@ -55,6 +55,8 @@ Abstract base `MatCompressor` implements the template-method pattern:
 - All concrete implementations are **singletons** accessed via `Instance`.
 - When adding a new compressor, implement `CompressCore` / `DecompressCore` — never override the non-virtual `Compress(Mat, CompressionLevel)` or `Decompress(byte[], Mat)` directly.
 
+`MatCompressorDelta` is not a singleton: it wraps an inner byte compressor (static `Deflate`/`Brotli`/`Zstd` instances, registered) with a lossless per-row delta + byte-plane filter. Its encoded layout is a storage format — never change it. It reaches the inner compressor's protected members through the `private protected` bridges `GetCompressionLevelOf`/`AllocatesDestinationOf` in `MatCompressor`.
+
 Available compressors (registered in `MatCompressor.AvailableCompressors`): `None`, `PNG`, `TIFF`, `Deflate`, `GZip`, `ZLib`, `Brotli`, `Zstd` (.NET 11+ only, guarded by `#if NET11_0_OR_GREATER`).
 
 **`CMat`** is a compressed-Mat class (`IEquatable<CMat>`):

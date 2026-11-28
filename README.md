@@ -368,11 +368,20 @@ mat.PutTextExtended("Line 1\nLine 2\nLine 3",
 | ZLib       | `MatCompressorZLib`    | ZLib stream compression                                            |
 | Brotli     | `MatCompressorBrotli`  | Brotli stream compression                                          |
 | Zstd       | `MatCompressorZstd`    | Zstandard compression (.NET 11+)                                   |
+| Deflate+Delta, Brotli+Delta, Zstandard+Delta | `MatCompressorDelta.Deflate` / `.Brotli` / `.Zstd` | Stream compression after a lossless delta filter, any depth (`Zstd` on .NET 11+) |
 
 The image codecs (PNG, TIFF) only accept 1, 3 or 4 channels and the depths listed; anything else makes `CMat` store the
 matrix raw.
 
-All compressors are singletons accessed via `Instance` (e.g., `MatCompressorBrotli.Instance`). Public `CompressAsync`
+**Choosing a compressor:** for continuous-tone data (photos, depth maps, float fields) use a delta compressor: it
+replaces each element by its difference from the previous one in the row, so on 3840×2160 test images
+`MatCompressorDelta.Zstd` reached 1.7-1.9× where plain Zstd reached about 1.05×, matching or beating TIFF (1.45-1.72×)
+while compressing 2-5× faster. For masks and images with large flat areas use the plain stream compressors (Zstd, Brotli),
+which are smaller and much faster there. Wrap any other byte compressor with `new MatCompressorDelta(inner)` and
+register it in `MatCompressor.AvailableCompressors` so `CMat` can find it.
+
+All compressors are singletons accessed via `Instance` (e.g., `MatCompressorBrotli.Instance`; the delta variants are the
+static fields of `MatCompressorDelta`). Public `CompressAsync`
 and `DecompressAsync` methods call overrideable `CompressCoreAsync` and `DecompressCoreAsync` methods, so custom
 compressors can provide native async behavior instead of only using the default background-thread wrapper.
 

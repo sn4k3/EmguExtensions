@@ -54,7 +54,8 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
     /// Gets a collection of available material compressors supported by the system.
     /// </summary>
     /// <remarks>
-    /// The collection includes built-in compressors such as None, PNG, TIFF, Deflate, GZip, ZLib, and Brotli.<br/>
+    /// The collection includes built-in compressors such as None, PNG, TIFF, Deflate, GZip, ZLib, Brotli, and the
+    /// delta-filtered <see cref="MatCompressorDelta"/> variants.<br/>
     /// The collection is not thread-safe: register custom compressors once during application startup,
     /// before any <see cref="GetCompressorById"/> or <see cref="GetCompressorByName"/> lookups run concurrently.
     /// </remarks>
@@ -69,6 +70,11 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
         MatCompressorBrotli.Instance,
 #if NET11_0_OR_GREATER
         MatCompressorZstd.Instance,
+#endif
+        MatCompressorDelta.Deflate,
+        MatCompressorDelta.Brotli,
+#if NET11_0_OR_GREATER
+        MatCompressorDelta.Zstd,
 #endif
     ];
 
@@ -469,6 +475,22 @@ public abstract class MatCompressor : IEquatable<MatCompressor>
         return AvailableCompressors.FirstOrDefault(compressor =>
             compressor.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
         );
+    }
+
+    /// <summary>
+    /// Maps a <see cref="CompressionLevel"/> with another compressor's mapping (for wrapping compressors).
+    /// </summary>
+    private protected static int GetCompressionLevelOf(MatCompressor compressor, CompressionLevel compressionLevel)
+    {
+        return compressor.GetCompressionLevel(compressionLevel);
+    }
+
+    /// <summary>
+    /// Gets whether another compressor allocates its decompression destination (for wrapping compressors).
+    /// </summary>
+    private protected static bool AllocatesDestinationOf(MatCompressor compressor)
+    {
+        return compressor.AllocatesDestination;
     }
 
     /// <summary>

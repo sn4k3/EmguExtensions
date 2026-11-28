@@ -1,9 +1,17 @@
-# v0.4.2 (/11/2026)
+# v0.4.2 (28/11/2026)
 
 - Add `MatCompressorTiff` (registered in `MatCompressor.AvailableCompressors`): lossless TIFF codec via OpenCV with
   Adobe Deflate (levels 1-9, 0 stores uncompressed, `Optimal` = 3). Best for continuous-tone data (photos, depth
   maps, float fields), where its predictor compresses far better than the stream compressors. Unlike PNG it compresses signed and 32/64-bit integer and `Cv32F`
   matrices. Depths it cannot store losslessly (`Cv16F`, `Cv16BF`, `CvBool`, FP8) and channel counts other than 1, 3 or 4 throw `NotSupportedException`, so `CMat` stores them raw. OpenCV writes `Cv64F` uncompressed.
+- Add `MatCompressorDelta`: wraps a byte compressor with a lossless delta filter (each element minus the previous one
+  of the same channel in the row, then byte planes for multi-byte depths; vectorized with SSSE3/ARM64 shuffles and
+  undone in place on decompression, adding only about 1-6 ms over the inner compressor at 4K). Supports every depth, channel count, ROI
+  view and non-continuous matrix. On continuous-tone data `MatCompressorDelta.Zstd` compresses 1.7-1.9× versus about
+  1.05× for plain Zstd, matching or beating `MatCompressorTiff` while being 2-5× faster. Ready-made `Deflate`,
+  `Brotli` and `Zstd` (.NET 11+) variants are registered in `MatCompressor.AvailableCompressors` as
+  `Deflate+Delta`, `Brotli+Delta` and `Zstandard+Delta`; `new MatCompressorDelta(inner)` wraps any other byte
+  compressor.
 - `GetTiffBytes`: correct the documentation, it is lossless only for integer and 32/64-bit float depths with 1, 3 or 4
   channels (`Cv16F`, `Cv16BF`, `CvBool` and FP8 are converted to 8-bit), and the LZMA/Zstd schemes are not built into
   the official Windows runtime (they fall back to LZW).
